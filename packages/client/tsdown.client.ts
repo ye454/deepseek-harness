@@ -29,8 +29,11 @@ const CSS_VIRTUAL_SUFFIX = '.mjs'
  * with no runtime identity to share (no Symbol/instanceof/singleton state).
  * Everything else under @deepseek-ai/* is either a module-table entry
  * (external) or a leak the purity gate rejects.
+ *
+ * `token-meter/client` is an exact specifier (projection types plus billed
+ * display helpers). The host package root is not admitted: it imports cordis.
  */
-export const INLINE_SAFE = /^@deepseek-ai\/dsh-(host-apiproxy|session|llm|tools|brand)(\/|$)/
+export const INLINE_SAFE = /^@deepseek-ai\/dsh-(host-apiproxy|session|llm|tools|brand)(\/|$)|^@deepseek-ai\/dsh-token-meter\/client$/
 
 /**
  * Vendored framework libraries: rescoped into @deepseek-ai, so the gate below

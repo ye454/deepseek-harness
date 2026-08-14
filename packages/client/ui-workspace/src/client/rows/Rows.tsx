@@ -16,6 +16,7 @@ import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
 import type { GroupNode, SearchResultNode, SessionNode } from '../tree.ts'
 import { relativeTime } from '../tree.ts'
+import { formatCompactTokens } from '@deepseek-ai/dsh-token-meter/client'
 import css from './Rows.module.css'
 
 /** The standard locale seat, prop-passed from the browser root. */
@@ -271,15 +272,25 @@ function SessionStatusDots({ statuses }: { statuses: readonly [SessionStatus, ..
   )
 }
 
-/** Hover-card body: full title, relative time, and every relevant live status. */
+/** Hover-card body: full title, relative time, billed tokens, and every relevant live status. */
 function SessionHoverContent({ node, now, t }: { node: SessionNode; now: number; t: RowTranslate }) {
   const statuses = sessionStatuses(node, t)
+  const tokens = node.tokenTotals
   return (
     <div className={css.hoverContent}>
       <div className={css.hoverTitle}>{displayTitle(node, t)}</div>
       {/* Same placeholder rule as the row's trailing cell: no timestamp
           before the first prompt. */}
       {!node.blank && <div className={css.hoverTime}>{hoverTimeLabel(node.updatedAt, now, t)}</div>}
+      {tokens !== undefined && (
+        <div className={css.hoverTime}>
+          {t('tokens.hover', {
+            input: formatCompactTokens(tokens.input),
+            output: formatCompactTokens(tokens.output),
+            total: formatCompactTokens(tokens.total),
+          })}
+        </div>
+      )}
       {statuses.map(status => (
         <div className={css.hoverStatus} key={status.label}>
           <StateDot state={status.state} />
@@ -337,7 +348,8 @@ export function SearchResultItem({ result, currentId, onOpen, t }: {
 
 /**
  * One top-level 34px session row: status dot (pending user interaction outranks
- * own or descendant activity), title, relative time, and the row actions menu.
+ * own or descendant activity), title, compact billed-token total, relative time,
+ * and the row actions menu.
  * @param props.node - derived session node.
  * @param props.currentId - selected session id (row highlight).
  * @param props.now - epoch ms for relative-time formatting.
@@ -432,6 +444,9 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
           happened in it yet, so a "now" timestamp and the row verbs
           (rename/fork/archive) would all act on content that does not
           exist — both trailing cells stay off until the first prompt. */}
+      {!row.blank && row.tokenTotals !== undefined && (
+        <span className={css.tokens}>{formatCompactTokens(row.tokenTotals.total)}</span>
+      )}
       {!row.blank && <span className={css.time}>{timeLabel(row.updatedAt, now, t)}</span>}
       {!row.blank && (
         <span className={css.rowActions}>

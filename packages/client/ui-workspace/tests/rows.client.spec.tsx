@@ -450,6 +450,25 @@ describe('workspace browser rows', () => {
     }
   })
 
+  it('shows compact billed tokens on the row and in the hover card', () => {
+    vi.useFakeTimers()
+    try {
+      const node: SessionNode = {
+        id: sid('s1'), title: 'Metered', blank: false, running: false,
+        runningSubagentCount: 0, completed: false, updatedAt: 0,
+        tokenTotals: { input: 12_240, output: 300, total: 12_540 },
+      }
+      render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={vi.fn()}
+        onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()} t={t} />)
+      expect(screen.getByText('12.5K')).toBeTruthy()
+      fireEvent.pointerEnter(screen.getByRole('treeitem').parentElement as HTMLElement)
+      act(() => { vi.advanceTimersByTime(500) })
+      expect(screen.getByText('输入 12.2K · 输出 300 · 合计 12.5K')).toBeTruthy()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('completed hover card shows the Completed status line', () => {
     vi.useFakeTimers()
     try {

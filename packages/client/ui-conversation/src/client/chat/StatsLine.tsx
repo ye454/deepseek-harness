@@ -8,7 +8,9 @@ import type { ConversationSnapshot, UseProjection } from '@deepseek-ai/dsh-clien
 import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: merges the sessionStats key into SessionProjectionMap for useProjection.
 import type {} from '@deepseek-ai/dsh-session-stats/client'
-import type { ContextPressureProjection, TokenUsageProjection } from '@deepseek-ai/dsh-token-meter/client'
+import {
+  billedInputTokens, formatCompactTokens, type ContextPressureProjection, type TokenUsageProjection,
+} from '@deepseek-ai/dsh-token-meter/client'
 import type { ComposerBarProps } from '../contract/slots.ts'
 import { formatTokensPerSecond } from './message-chrome.ts'
 import { assistantStepReading } from './turn-metrics.ts'
@@ -76,18 +78,11 @@ export function deriveStats(nodes: ConversationSnapshot['nodes']): WindowStats {
   return { turns: turns.size, steps, llmMs, toolMs, ttftMs, ttftSteps, decodeMs, decodeTokens }
 }
 
-/**
- * Compact token count: 517 / 12.2K / 517K / 1.2M (one decimal under three digits).
- * @param n - token count.
- * @returns display string.
- */
-export function formatTokens(n: number): string {
-  const scaled = (v: number): string =>
-    v >= 100 ? String(Math.round(v)) : String(Math.round(v * 10) / 10)
-  if (n < 1_000) return String(n)
-  if (n < 1_000_000) return `${scaled(n / 1_000)}K`
-  return `${scaled(n / 1_000_000)}M`
-}
+/** Compact token count: 517 / 12.2K / 517K / 1.2M. */
+export const formatTokens = formatCompactTokens
+
+/** Sum of the three disjoint prompt-side billing buckets. */
+export { billedInputTokens }
 
 /**
  * Compact duration: 45.2s under a minute, 2m42s from there on.
@@ -111,15 +106,6 @@ export function cacheHitPercent(usage: TokenUsageProjection): number | null {
   return denominator === 0
     ? null
     : Math.round(usage.cacheReadTokens / denominator * 100)
-}
-
-/**
- * Sum the three disjoint prompt-side billing buckets.
- * @param usage - the session's token-usage projection value.
- * @returns billed input tokens.
- */
-export function billedInputTokens(usage: TokenUsageProjection): number {
-  return usage.uncachedInputTokens + usage.cacheReadTokens + usage.cacheWriteTokens
 }
 
 interface ContextOccupancy {

@@ -212,6 +212,14 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+.tokens {
+  flex: none;
+  font-size: 12px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-tertiary);
+}
+
 .dot {
   flex: none;
 }
@@ -233,7 +241,9 @@
 }
 
 .sessionRow:hover .time,
-.sessionRow.menuOpen .time {
+.sessionRow:hover .tokens,
+.sessionRow.menuOpen .time,
+.sessionRow.menuOpen .tokens {
   display: none;
 }
 

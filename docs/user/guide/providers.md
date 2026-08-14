@@ -85,6 +85,8 @@ Configured providers appear in the model picker. Selecting a model also makes it
 
 If a saved default names a provider that was deleted, the composer displays **Select model** and blocks input until another model is selected.
 
+Billed token totals for every configured route, including custom OpenAI-compatible endpoints, appear on the session list and **Settings → Usage**. The [Web UI guide](./index.md#review-token-usage) covers comparing sessions and exporting counts.
+
 ## Troubleshooting
 
 - **`MISSING_CREDENTIAL`** — Store the provider key through the Models page or supply the referenced environment variable.

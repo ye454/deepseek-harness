@@ -33,7 +33,7 @@ fold 跟踪完整请求标头快照、步骤边界、表层追加与替换、成
 
 `contextBreakdown` 携带启发式的 `systemTokens`、`toolsTokens` 与 `messageTokens`，描述上下文的组成而非提供方计费规模。envelope 数字在每条 `request/header` 上按后者胜重新计价；消息数字重放 `surface-fold.ts`——也就是 `measure()` 运行的同一个带位置 fold——因此它在每个事件边界上都等于 `measure().surfaceTokens`，压缩会像缩小下一个请求那样缩小它。三个数字都使用测量服务的固定启发式规则，属于估算值：它们加起来不等于 `projectedTokens`——后者的提供方锚点所体现的恰好是这些明细行仍然带着的误差（按「4 字符 ≈ 1 token」计价，CJK 文本与 JSON schema 会被严重低估）。请把它们当作近似的**组成**呈现，而不是总量。
 
-三个单元都使用标准的投影基线、实时帧、seq 高者胜值仓和 JSON 检查点路径。卸载 token-meter 会移除这三个键。不带投影 seam 的组合会保留测量服务的既有行为。
+三个单元都使用标准的投影基线、实时帧、seq 高者胜值仓和 JSON 检查点路径。卸载 token-meter 会移除这三个键。不带投影 seam 的组合会保留测量服务的既有行为。client 入口还导出 `billedInputTokens`、`billedTotalTokens` 和 `formatCompactTokens`，供浏览器 UI 使用与对话统计相同的计费合计拼写。
 
 ### 上下文占用率是刻意为之的近似值
 

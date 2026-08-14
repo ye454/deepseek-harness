@@ -68,6 +68,7 @@ export const zh = {
   'time.months': '{n}个月',
   'time.years': '{n}年',
   'time.ago': '{t}前',
+  'tokens.hover': '输入 {input} · 输出 {output} · 合计 {total}',
 } satisfies Record<string, string>
 
 /** The workspace namespace key union. */
@@ -137,4 +138,5 @@ export const en = {
   'time.months': '{n}mo',
   'time.years': '{n}y',
   'time.ago': '{t} ago',
+  'tokens.hover': 'In {input} · Out {output} · Total {total}',
 } satisfies Record<WorkspaceKey, string>

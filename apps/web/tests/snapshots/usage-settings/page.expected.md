@@ -1,0 +1,55 @@
+- dialog "设置":
+  - navigation:
+    - text: 设置
+    - button "通用设置":
+      - img
+      - text: 通用设置
+    - button "模型":
+      - img
+      - text: 模型
+    - button "用量":
+      - img
+      - text: 用量
+    - button "插件":
+      - img
+      - text: 插件
+    - button "Agent 预设":
+      - img
+      - text: Agent 预设
+  - button "打开配置文件"
+  - button "关闭":
+    - img
+    - text: 关闭
+  - heading "用量" [level=2]
+  - paragraph: 按会话汇总提供方报告的 token 用量。数字来自会话日志投影，与对话底部统计一致。
+  - img
+  - text: 搜索会话或工作区
+  - searchbox "搜索会话或工作区"
+  - text: 最少合计 token
+  - spinbutton "最少合计 token"
+  - button "导出 CSV"
+  - button "导出 JSON"
+  - paragraph: 2 个会话 · 输入 12.3K · 输出 320 · 合计 12.7K
+  - table:
+    - rowgroup:
+      - row "会话 工作区 输入 输出 合计":
+        - columnheader "会话"
+        - columnheader "工作区"
+        - columnheader "输入"
+        - columnheader "输出"
+        - columnheader "合计"
+    - rowgroup:
+      - row "Beta billed {{workspace}} 12.2K 300 12.5K":
+        - cell "Beta billed":
+          - button "Beta billed"
+        - cell "{{workspace}}"
+        - cell "12.2K"
+        - cell "300"
+        - cell "12.5K"
+      - row "Alpha billed {{workspace}} 100 20 120":
+        - cell "Alpha billed":
+          - button "Alpha billed"
+        - cell "{{workspace}}"
+        - cell "100"
+        - cell "20"
+        - cell "120"

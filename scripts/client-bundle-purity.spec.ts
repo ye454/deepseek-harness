@@ -77,6 +77,12 @@ describe('client bundle purity gate', () => {
     expect(resolveId('@deepseek-ai/dsh-brand')).toBeNull()
   })
 
+  it('lets token-meter/client inline without admitting the host package root', () => {
+    expect(resolveId('@deepseek-ai/dsh-token-meter/client')).toBeNull()
+    expect(() => resolveId('@deepseek-ai/dsh-token-meter')).toThrow(/purity/)
+    expect(() => resolveId('@deepseek-ai/dsh-token-meter/src/display.ts')).toThrow(/purity/)
+  })
+
   it('lets exact generated Remote contributions inline without admitting their package implementation', () => {
     expect(resolveId('@deepseek-ai/dsh-goal/remote')).toBeNull()
     expect(() => resolveId('@deepseek-ai/dsh-goal')).toThrow(/purity/)

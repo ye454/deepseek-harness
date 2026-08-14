@@ -48,6 +48,32 @@ describe('deriveGroups', () => {
     expect(deriveFlat(sessions, noArchive)[0]).toMatchObject({ pendingInteraction: 'plan-review', running: true })
   })
 
+  it('projects billed token totals and omits a zero-usage projection', () => {
+    const billed = {
+      ...summary('billed', 10),
+      projectionValues: {
+        tokenUsage: {
+          uncachedInputTokens: 100, outputTokens: 20, cacheReadTokens: 50, cacheWriteTokens: 30,
+        },
+      },
+    }
+    const zero = {
+      ...summary('zero', 9),
+      projectionValues: {
+        tokenUsage: {
+          uncachedInputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0,
+        },
+      },
+    }
+    const sessions = list(billed, zero)
+    const grouped = deriveGroups(sessions, [workspace('project', ['billed', 'zero'])], noArchive, view(['project']))
+    expect(grouped[0]!.sessions[0]).toMatchObject({
+      id: sid('billed'), tokenTotals: { input: 180, output: 20, total: 200 },
+    })
+    expect(grouped[0]!.sessions[1]?.tokenTotals).toBeUndefined()
+    expect(deriveFlat(sessions, noArchive)[0]?.tokenTotals).toEqual({ input: 180, output: 20, total: 200 })
+  })
+
   it('puts only real unaccounted Sessions in the trailing Ungrouped group', () => {
     const sessions = list(summary('owned', 1, '/projects/first'), summary('loose', 9, '/other'))
     const groups = deriveGroups(sessions, [workspace('first', ['owned'])], noArchive, view([UNGROUPED_KEY]))

@@ -8,6 +8,7 @@ import {
   type SessionSearchResultItem, type SessionSummary, type SubagentDescendantSummary,
   type WorkspaceId, type WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
+import { billedInputTokens, billedTotalTokens } from '@deepseek-ai/dsh-token-meter/client'
 
 /** Group key for Sessions outside every Workspace. */
 export const UNGROUPED_KEY = ''
@@ -30,6 +31,11 @@ export interface SessionNode {
   /** Finished running while not selected and not yet opened (the green "done" reminder dot). */
   completed: boolean
   updatedAt: number
+  /**
+   * Durable billed totals from `tokenUsage`; absent when the log has not
+   * recorded any provider usage.
+   */
+  tokenTotals?: { input: number; output: number; total: number }
 }
 
 /** Session order selected by the Workspace browser. */
@@ -211,10 +217,24 @@ function groupByWorkspace(
   return groups
 }
 
+/**
+ * Project billed totals when the durable meter has recorded any usage.
+ * @param session - list summary carrying optional `tokenUsage`.
+ * @returns input/output/total, or undefined when nothing was billed.
+ */
+function tokenTotalsOf(session: SessionSummary): SessionNode['tokenTotals'] {
+  const usage = session.projectionValues?.tokenUsage
+  if (usage === undefined) return undefined
+  const total = billedTotalTokens(usage)
+  if (total === 0) return undefined
+  return { input: billedInputTokens(usage), output: usage.outputTokens, total }
+}
+
 function sessionNode(
   s: SessionSummary,
   descendants: ReadonlyMap<SessionId, SubagentDescendantSummary>,
 ): SessionNode {
+  const tokenTotals = tokenTotalsOf(s)
   return {
     id: s.id,
     title: sessionTitle(s),
@@ -224,6 +244,7 @@ function sessionNode(
     completed: s.completed === true,
     updatedAt: s.updatedAt,
     ...(s.pendingInteraction === undefined ? {} : { pendingInteraction: s.pendingInteraction }),
+    ...(tokenTotals === undefined ? {} : { tokenTotals }),
   }
 }
 

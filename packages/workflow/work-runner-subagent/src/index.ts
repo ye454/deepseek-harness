@@ -5,7 +5,7 @@
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
-import type { SubagentResult, SubagentRun, SubagentStopReason } from '@deepseek-ai/dsh-subagent'
+import type { SubagentRun, SubagentStopReason } from '@deepseek-ai/dsh-subagent'
 import { ExecutionThreadConflictError } from '@deepseek-ai/dsh-work-execution'
 import type { ExecutionStopReason, ExecutionThread, ExecutionThreadRef } from '@deepseek-ai/dsh-work-execution'
 import type { TaskWorkItem } from '@deepseek-ai/dsh-work-control'
@@ -57,9 +57,11 @@ export class WorkSubagentRunner extends Service {
   }
 
   /**
-   * Run one one-shot provider against the current task context. Preflight and prompt-budget failures happen
-   * before the request event; after the exact prompt is logged, provider startup may still reject without a
-   * published run. A published run is immediately attached to the thread or disposed if that commit loses a race.
+   * Run one isolated one-shot provider against the current Task Context Package. Providers that inherit the
+   * parent's completed history are refused on this path because their true model input would exceed this bridge's
+   * bounded packet. Preflight and prompt-budget failures happen before the request event; after the exact prompt is
+   * logged, provider startup may still reject without a published run. A published run is immediately attached to
+   * the thread or disposed if that commit loses a race.
    * @param request - thread, delegating parent, provider, cancellation, byte budget, and optional Handoff.
    * @returns runner output plus the settled execution-thread projection.
    */
@@ -68,6 +70,11 @@ export class WorkSubagentRunner extends Service {
     const provider = this.ctx.subagents.getProvider(request.provider)
     if (provider === undefined) {
       throw new WorkRunnerPreflightError(`no DSH subagent provider registered for '${request.provider}'`)
+    }
+    if (provider.inheritsParentContext) {
+      throw new WorkRunnerPreflightError(
+        `subagent provider '${provider.name}' inherits parent history and cannot use the isolated work-runner path`,
+      )
     }
 
     const thread = this.requireIdleThread(request.thread)
@@ -82,6 +89,7 @@ export class WorkSubagentRunner extends Service {
       provider: provider.name,
       mode: 'one-shot',
       maxPromptBytes: request.maxPromptBytes,
+      promptBytes: prompt.bytes,
       prompt: prompt.text,
     }
     request.parent.session.append('work-runner/subagent-request', event)
@@ -189,9 +197,5 @@ async function disposeAfterFailure(run: SubagentRun, error: unknown): Promise<ne
   }
   throw error
 }
-
-/** Type-only compile anchor for the imported result contract. */
-const _subagentResultContract: SubagentResult | undefined = undefined
-void _subagentResultContract
 
 export default WorkSubagentRunner

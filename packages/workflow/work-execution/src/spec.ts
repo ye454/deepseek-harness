@@ -31,6 +31,8 @@ const settledAttempt = activeAttempt.extend({
 
 /** Durable execution-thread record schema. */
 export const executionThreadRecord = z.object({
+  id: executionThreadId,
+  revision: z.number().int().positive(),
   taskId: workItemId,
   state: z.enum(['idle', 'running', 'blocked', 'closed', 'cancelled']),
   attemptSeq: z.number().int().nonnegative(),
@@ -53,6 +55,3 @@ export const workExecutionDomainSpec = defineDomain({
     threads: domainTable<ExecutionThreadId, ExecutionThreadRecord>(executionThreadRecord),
   },
 })
-
-/** Runtime parser for durable thread ids at wire/persistence boundaries. */
-export const executionThreadIdSchema = executionThreadId

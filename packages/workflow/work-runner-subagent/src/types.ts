@@ -6,7 +6,13 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
-import type { ExecutionStopReason, ExecutionThread, ExecutionThreadRef } from '@deepseek-ai/dsh-work-execution'
+import type {
+  ExecutionStopReason,
+  ExecutionThread,
+  ExecutionThreadId,
+  ExecutionThreadRef,
+} from '@deepseek-ai/dsh-work-execution'
+import type { WorkItemId } from '@deepseek-ai/dsh-work-control'
 
 /** Operational conclusions that can cross runner/session boundaries without replaying a transcript. */
 export interface WorkHandoff {
@@ -56,8 +62,8 @@ export interface RunOneShotResult {
 export interface WorkRunnerSubagentRequestEvent {
   readonly kind: 'work-runner/subagent-request'
   readonly version: 1
-  readonly taskId: string
-  readonly threadId: string
+  readonly taskId: WorkItemId
+  readonly threadId: ExecutionThreadId
   readonly threadRevision: number
   readonly provider: string
   readonly mode: 'one-shot'

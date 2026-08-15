@@ -4,6 +4,8 @@ import { Context } from '@deepseek-ai/cordis'
 import InvariantRegistry from '@deepseek-ai/dsh-invariants'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import { WorkItemId } from '@deepseek-ai/dsh-work-control'
+import { ExecutionThreadId } from '@deepseek-ai/dsh-work-execution'
 import { WORK_RUNNER_PROMPT_PREFIX } from '../src/index.ts'
 import type { WorkRunnerSubagentRequestEvent } from '../src/index.ts'
 import * as WorkRunnerInvariant from '../src/invariant.ts'
@@ -22,8 +24,8 @@ function requestEvent(overrides: Partial<WorkRunnerSubagentRequestEvent> = {}): 
   return session.append('work-runner/subagent-request', {
     kind: 'work-runner/subagent-request',
     version: 1,
-    taskId: 'task-1',
-    threadId: 'thread-1',
+    taskId: WorkItemId('task-1'),
+    threadId: ExecutionThreadId('thread-1'),
     threadRevision: 1,
     provider: 'codex',
     mode: 'one-shot',

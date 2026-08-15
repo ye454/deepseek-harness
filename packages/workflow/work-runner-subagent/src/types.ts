@@ -32,7 +32,7 @@ export interface WorkRunnerDescriptor {
   }
 }
 
-/** Start one one-shot DSH subagent attempt for an existing execution thread. */
+/** Start one isolated one-shot DSH subagent attempt for an existing execution thread. */
 export interface RunOneShotRequest {
   readonly thread: ExecutionThreadRef
   readonly parent: Agent
@@ -52,7 +52,7 @@ export interface RunOneShotResult {
   readonly thread: ExecutionThread
 }
 
-/** Durable parent-session record of the exact child prompt sent by this bridge. */
+/** Durable parent-session record of the exact child prompt requested through this bridge. */
 export interface WorkRunnerSubagentRequestEvent {
   readonly kind: 'work-runner/subagent-request'
   readonly version: 1
@@ -62,12 +62,13 @@ export interface WorkRunnerSubagentRequestEvent {
   readonly provider: string
   readonly mode: 'one-shot'
   readonly maxPromptBytes: number
+  readonly promptBytes: number
   readonly prompt: string
 }
 
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
-    /** Exact model-visible prompt submitted to a work runner through the subagent bridge. */
+    /** Exact child prompt requested from a DSH subagent provider by the work runner bridge. */
     'work-runner/subagent-request': WorkRunnerSubagentRequestEvent
   }
 }

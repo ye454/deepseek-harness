@@ -2,10 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
-import { MemoryMediaPool, MemoryStorageBackend } from '../../storage/storage-domain/tests/helpers/memory-backend.ts'
+import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 import WorkControlService, {
   WorkItemConflictError,
-  WorkItemTransitionError,
   isTaskStatusTransitionAllowed,
 } from '../src/index.ts'
 import type { TaskWorkItem, WorkItemRef } from '../src/index.ts'

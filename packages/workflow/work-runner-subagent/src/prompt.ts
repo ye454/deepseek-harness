@@ -85,13 +85,19 @@ function requiredValidators(validators: readonly ValidatorSpec[]): string[] {
 }
 
 function normalizeHandoff(handoff: WorkHandoff): WorkHandoff {
+  const completed = normalizeList(handoff.completed)
+  const facts = normalizeList(handoff.facts)
+  const decisions = normalizeList(handoff.decisions)
+  const constraints = normalizeList(handoff.constraints)
+  const references = normalizeList(handoff.references)
+  const nextStep = normalizeText(handoff.nextStep)
   return {
-    ...normalizeList(handoff.completed) === undefined ? {} : { completed: normalizeList(handoff.completed) },
-    ...normalizeList(handoff.facts) === undefined ? {} : { facts: normalizeList(handoff.facts) },
-    ...normalizeList(handoff.decisions) === undefined ? {} : { decisions: normalizeList(handoff.decisions) },
-    ...normalizeList(handoff.constraints) === undefined ? {} : { constraints: normalizeList(handoff.constraints) },
-    ...normalizeList(handoff.references) === undefined ? {} : { references: normalizeList(handoff.references) },
-    ...normalizeText(handoff.nextStep) === undefined ? {} : { nextStep: normalizeText(handoff.nextStep) },
+    ...completed === undefined ? {} : { completed },
+    ...facts === undefined ? {} : { facts },
+    ...decisions === undefined ? {} : { decisions },
+    ...constraints === undefined ? {} : { constraints },
+    ...references === undefined ? {} : { references },
+    ...nextStep === undefined ? {} : { nextStep },
   }
 }
 

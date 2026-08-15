@@ -22,9 +22,9 @@ idea
 
 ## 持久状态
 
-本包打开 `work-control` storage domain，只保存一张判别联合类型的 `items` 表。想法推进时通过一次持久表更新把 idea 原地转换成 task，同时保留 `WorkItemId`，避免“想法表 → 任务表”的双记录事务。所有变更都通过 `WorkItemRef { id, revision }` 做 compare-and-set 并发保护。
+本包打开 `work-control` storage domain，只保存一张判别联合类型的 `items` 表。想法推进时通过一次持久表更新把 idea 原地转换成 task，同时保留 `WorkItemId`，避免“想法表 → 任务表”的双记录事务。想法推进与删除在服务内部串行化，因此同一个 revision 不可能同时提交“删除”和“推进”。Task 变更继续通过 `WorkItemRef { id, revision }` 做 compare-and-set 并发保护。
 
-Task 可以携带动态生成的 Workflow 和可组合 Validation Policy。Validator 包含自动测试、视觉模型、运行状态、日志、Benchmark、真机、静态检查、产物检查与用户验收；每个 Validator 可以是 required、advisory 或 optional。对于无需独立验收的任务，Validator 列表允许为空。
+Task 可以携带动态生成的 Workflow 和可组合 Validation Policy。Validator 包含自动测试、视觉模型、运行状态、日志、Benchmark、真机、静态检查、产物检查与用户验收；每个 Validator 可以是 required、advisory 或 optional。required 数量从持久策略中派生，所有 required validator 未通过前，领域层会拒绝进入 `done`。因此只要 `user-acceptance` 被声明为 required，即使 AI 自动验收已经通过，任务仍必须等待人工验收记录。
 
 ## 组合
 
@@ -34,7 +34,7 @@ Task 可以携带动态生成的 Workflow 和可组合 Validation Policy。Valid
 dsh plugin --profile web add <path-to-package>
 ```
 
-它依赖 `ctx.storageDomain`，标准 DSH base 组合已经提供该能力。
+它依赖 `ctx.storageDomain`。标准 Web 组合会挂载 `storage`、JSON backend 和 `storage-domain`；base/headless 组合若要使用本包，需要显式挂载合适的 storage backend 与 `storage-domain`。
 
 ## Model Experience
 
@@ -57,4 +57,4 @@ dsh plugin --profile web add <path-to-package>
 - **尚未挂接执行器** —— `ExecutionThread`、Runner、Remote Node、Environment、Handoff 和 Evidence 会作为独立 Package 继续实现。
 - **尚未提供全局 Web UI** —— 目标是“想法 / 执行 / 验收”三块轻量面板，由 Client Plugin 覆盖在本服务之上，而不是塞进持久领域。
 - **尚未提供组织器 Consumer** —— 想法推进后停在 `organizing`，后续组织器才会选择/生成 Workflow 与 Validation Policy。
-- **尚未提供 Validator 权威层** —— 本包只存紧凑验收进度；自动验收执行以及“自动完成还是等待人工确认”的规则属于后续 validation 层。
+- **尚未提供 Validator 执行器** —— 本包已经强制 required 数量和完成条件保持一致，但自动测试、视觉检查、真机验证和人工验收记录由后续 validator consumer 执行。

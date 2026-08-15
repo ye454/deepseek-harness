@@ -187,7 +187,8 @@ export class WorkControlService extends Service {
    * @returns the current durable record or undefined.
    */
   get(id: WorkItemId): WorkItem | undefined {
-    return this.requireTable().get(id)
+    const record = this.requireTable().get(id)
+    return record === undefined ? undefined : asWorkItem(record)
   }
 
   /**
@@ -199,7 +200,8 @@ export class WorkControlService extends Service {
    */
   promoteIdea(expected: WorkItemRef, request: PromoteIdeaRequest = {}): Promise<TaskWorkItem> {
     return this.enqueueIdeaTransition(async () => {
-      const next = await this.requireTable().update(expected.id, current => {
+      const next = await this.requireTable().update(expected.id, record => {
+        const current = asWorkItem(record)
         assertRef(current, expected)
         if (current.kind !== 'idea') {
           throw new WorkItemTransitionError(`work item '${expected.id}' is already a task`)
@@ -219,7 +221,7 @@ export class WorkControlService extends Service {
           updatedAt: now,
         }
       })
-      const task = next as TaskWorkItem
+      const task = asWorkItem(next) as TaskWorkItem
       this.emitChanged({ operation: 'promote', item: task, ref: refOf(task) })
       return task
     })
@@ -234,7 +236,8 @@ export class WorkControlService extends Service {
   async organizeTask(expected: WorkItemRef, request: OrganizeTaskRequest): Promise<TaskWorkItem> {
     validateWorkflow(request.workflow)
     validateValidators(request.validationPolicy.validators)
-    const next = await this.requireTable().update(expected.id, current => {
+    const next = await this.requireTable().update(expected.id, record => {
+      const current = asWorkItem(record)
       assertRef(current, expected)
       if (current.kind !== 'task' || current.status !== 'organizing') {
         throw new WorkItemTransitionError(`work item '${expected.id}' is not awaiting organization`)
@@ -252,7 +255,7 @@ export class WorkControlService extends Service {
         updatedAt: now,
       }
     })
-    const task = next as TaskWorkItem
+    const task = asWorkItem(next) as TaskWorkItem
     this.emitChanged({ operation: 'update', item: task, ref: refOf(task) })
     return task
   }
@@ -360,7 +363,7 @@ export class WorkControlService extends Service {
 
   private list(): WorkItem[] {
     return [...this.requireTable().entries()]
-      .map(([, item]) => item)
+      .map(([, item]) => asWorkItem(item))
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || String(left.id).localeCompare(String(right.id)))
   }
 
@@ -369,7 +372,8 @@ export class WorkControlService extends Service {
     mutate: (current: TaskWorkItem) => Omit<TaskWorkItem, 'revision' | 'updatedAt'>
       & Partial<Pick<TaskWorkItem, 'revision' | 'updatedAt'>>,
   ): Promise<TaskWorkItem> {
-    const next = await this.requireTable().update(expected.id, current => {
+    const next = await this.requireTable().update(expected.id, record => {
+      const current = asWorkItem(record)
       assertRef(current, expected)
       if (current.kind !== 'task') {
         throw new WorkItemTransitionError(`work item '${expected.id}' is still an idea`)
@@ -381,7 +385,7 @@ export class WorkControlService extends Service {
         updatedAt: new Date().toISOString(),
       }
     })
-    const task = next as TaskWorkItem
+    const task = asWorkItem(next) as TaskWorkItem
     this.emitChanged({ operation: 'update', item: task, ref: refOf(task) })
     return task
   }
@@ -411,6 +415,11 @@ export class WorkControlService extends Service {
       this.ctx.logger.warn(`work-control: work-control/changed listener failed: ${String(error)}`)
     }
   }
+}
+
+/** The storage domain has already validated the record; this narrows Zod's optional-field output to the domain interface. */
+function asWorkItem(record: WorkItemRecord): WorkItem {
+  return record as WorkItem
 }
 
 function refOf(item: WorkItem): WorkItemRef {

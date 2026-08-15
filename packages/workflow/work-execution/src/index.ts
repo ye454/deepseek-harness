@@ -141,7 +141,8 @@ export class WorkExecutionService extends Service {
    * @returns the current record or undefined.
    */
   get(id: ExecutionThreadId): ExecutionThread | undefined {
-    return this.requireTable().get(id)
+    const record = this.requireTable().get(id)
+    return record === undefined ? undefined : asExecutionThread(record)
   }
 
   /**
@@ -151,7 +152,7 @@ export class WorkExecutionService extends Service {
    */
   list(taskId?: WorkItemId): ExecutionThread[] {
     return [...this.requireTable().entries()]
-      .map(([, thread]) => thread)
+      .map(([, thread]) => asExecutionThread(thread))
       .filter(thread => taskId === undefined || thread.taskId === taskId)
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || String(left.id).localeCompare(String(right.id)))
   }
@@ -286,7 +287,8 @@ export class WorkExecutionService extends Service {
     mutate: (current: ExecutionThread) => Omit<ExecutionThread, 'revision' | 'updatedAt'>
       & Partial<Pick<ExecutionThread, 'revision' | 'updatedAt'>>,
   ): Promise<ExecutionThread> {
-    const next = await this.requireTable().update(expected.id, current => {
+    const next = await this.requireTable().update(expected.id, record => {
+      const current = asExecutionThread(record)
       assertRef(current, expected)
       const candidate = mutate(current)
       return {
@@ -295,7 +297,7 @@ export class WorkExecutionService extends Service {
         updatedAt: new Date().toISOString(),
       }
     })
-    const thread = next as ExecutionThread
+    const thread = asExecutionThread(next)
     this.emitChanged({ operation: 'update', thread, ref: refOf(thread) })
     return thread
   }
@@ -326,6 +328,11 @@ export class WorkExecutionService extends Service {
       this.ctx.logger.warn(`work-execution: work-execution/changed listener failed: ${String(error)}`)
     }
   }
+}
+
+/** The storage domain already validated the record; this narrows Zod optional-field output to the domain interface. */
+function asExecutionThread(record: ExecutionThreadRecord): ExecutionThread {
+  return record as ExecutionThread
 }
 
 function refOf(thread: ExecutionThread): ExecutionThreadRef {

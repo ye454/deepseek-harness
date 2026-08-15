@@ -19,6 +19,7 @@ import type {
   TaskStatus,
   TaskWorkItem,
   ValidationSummary,
+  ValidatorSpec,
   WorkItem,
   WorkItemChanged,
   WorkItemId as WorkItemIdBrand,
@@ -62,6 +63,7 @@ export function WorkItemId(id: string): WorkItemId {
 
 /** A request named an item absent from durable work-control state. */
 export class WorkItemNotFoundError extends Error {
+  /** @param id - Missing work-item id. */
   constructor(readonly id: WorkItemId) {
     super(`unknown work item '${id}'`)
     this.name = 'WorkItemNotFoundError'
@@ -70,6 +72,10 @@ export class WorkItemNotFoundError extends Error {
 
 /** A compare-and-set mutation used a stale revision. */
 export class WorkItemConflictError extends Error {
+  /**
+   * @param expected - Caller-owned work-item revision.
+   * @param actualRevision - Current durable revision.
+   */
   constructor(readonly expected: WorkItemRef, readonly actualRevision: number) {
     super(`stale work item '${expected.id}' revision ${expected.revision}; current revision is ${actualRevision}`)
     this.name = 'WorkItemConflictError'
@@ -78,6 +84,7 @@ export class WorkItemConflictError extends Error {
 
 /** A lifecycle mutation is invalid for the item's current kind or task state. */
 export class WorkItemTransitionError extends Error {
+  /** @param message - Concrete rejected transition reason. */
   constructor(message: string) {
     super(message)
     this.name = 'WorkItemTransitionError'
@@ -123,6 +130,7 @@ export class WorkControlService extends Service {
   static inject = ['storageDomain']
 
   private table?: KvTable<WorkItemId, WorkItemRecord>
+  private ideaTransitionTail: Promise<void> = Promise.resolve()
 
   constructor(ctx: Context) {
     super(ctx, 'workControl')
@@ -135,7 +143,7 @@ export class WorkControlService extends Service {
   }
 
   /**
-   * Capture a passive idea. This operation does not create an Agent, Goal, workflow run, or environment.
+   * Capture a passive idea without creating an Agent, Goal, workflow run, or environment.
    * @param request - Idea title plus optional summary and tags.
    * @returns the durable idea record.
    */
@@ -183,36 +191,38 @@ export class WorkControlService extends Service {
   }
 
   /**
-   * Explicitly promote an idea into the execution area. The task enters `organizing`; execution does not
-   * begin until a separate organizer supplies a workflow and validation policy.
+   * Explicitly promote an idea into the execution area. Promotion and idea deletion are serialized so
+   * one idea cannot be both deleted and promoted under the same revision.
    * @param expected - Exact idea revision.
    * @param request - Optional priority; omitted resolves to normal P2.
    * @returns the promoted task using the same stable id.
    */
-  async promoteIdea(expected: WorkItemRef, request: PromoteIdeaRequest = {}): Promise<TaskWorkItem> {
-    const next = await this.requireTable().update(expected.id, current => {
-      assertRef(current, expected)
-      if (current.kind !== 'idea') {
-        throw new WorkItemTransitionError(`work item '${expected.id}' is already a task`)
-      }
-      const now = new Date().toISOString()
-      return {
-        kind: 'task',
-        id: current.id,
-        revision: current.revision + 1,
-        title: current.title,
-        summary: current.summary,
-        tags: current.tags,
-        priority: request.priority ?? 'p2',
-        status: 'organizing',
-        createdAt: current.createdAt,
-        promotedAt: now,
-        updatedAt: now,
-      }
+  promoteIdea(expected: WorkItemRef, request: PromoteIdeaRequest = {}): Promise<TaskWorkItem> {
+    return this.enqueueIdeaTransition(async () => {
+      const next = await this.requireTable().update(expected.id, current => {
+        assertRef(current, expected)
+        if (current.kind !== 'idea') {
+          throw new WorkItemTransitionError(`work item '${expected.id}' is already a task`)
+        }
+        const now = new Date().toISOString()
+        return {
+          kind: 'task',
+          id: current.id,
+          revision: current.revision + 1,
+          title: current.title,
+          summary: current.summary,
+          tags: current.tags,
+          priority: request.priority ?? 'p2',
+          status: 'organizing',
+          createdAt: current.createdAt,
+          promotedAt: now,
+          updatedAt: now,
+        }
+      })
+      const task = next as TaskWorkItem
+      this.emitChanged({ operation: 'promote', item: task, ref: refOf(task) })
+      return task
     })
-    const task = next as TaskWorkItem
-    this.emitChanged({ operation: 'promote', item: task, ref: refOf(task) })
-    return task
   }
 
   /**
@@ -223,6 +233,7 @@ export class WorkControlService extends Service {
    */
   async organizeTask(expected: WorkItemRef, request: OrganizeTaskRequest): Promise<TaskWorkItem> {
     validateWorkflow(request.workflow)
+    validateValidators(request.validationPolicy.validators)
     const next = await this.requireTable().update(expected.id, current => {
       assertRef(current, expected)
       if (current.kind !== 'task' || current.status !== 'organizing') {
@@ -247,13 +258,13 @@ export class WorkControlService extends Service {
   }
 
   /**
-   * Move a task to another workflow stage without inventing a new workflow.
+   * Move a task to another existing workflow stage.
    * @param expected - Exact task revision.
    * @param stageId - Existing stage id from the task workflow.
    * @returns the updated task.
    */
   async setStage(expected: WorkItemRef, stageId: string): Promise<TaskWorkItem> {
-    const next = await this.updateTask(expected, current => {
+    return await this.updateTask(expected, current => {
       if (current.workflow === undefined) {
         throw new WorkItemTransitionError(`task '${expected.id}' has not been organized`)
       }
@@ -262,11 +273,10 @@ export class WorkControlService extends Service {
       }
       return { ...current, currentStageId: stageId }
     })
-    return next
   }
 
   /**
-   * Change execution status using the domain lifecycle table.
+   * Change execution status. Entering `done` is refused until every required validator has passed.
    * @param expected - Exact task revision.
    * @param status - Requested next status.
    * @returns the updated task.
@@ -276,6 +286,7 @@ export class WorkControlService extends Service {
       if (!isTaskStatusTransitionAllowed(current.status, status)) {
         throw new WorkItemTransitionError(`task '${expected.id}' cannot move from ${current.status} to ${status}`)
       }
+      if (status === 'done') assertRequiredValidationPassed(current)
       return { ...current, status }
     })
   }
@@ -296,32 +307,55 @@ export class WorkControlService extends Service {
   }
 
   /**
-   * Publish compact validator progress for the board. Detailed evidence is intentionally external.
+   * Publish compact validator progress for the board. Required counts are derived from the immutable task
+   * policy so a validator consumer cannot silently drop a required human or automated gate.
    * @param expected - Exact task revision.
    * @param summary - Aggregated validator result.
    * @returns the updated task.
    */
   async setValidationSummary(expected: WorkItemRef, summary: ValidationSummary): Promise<TaskWorkItem> {
-    if (summary.requiredPassed > summary.requiredTotal) {
-      throw new WorkItemTransitionError('requiredPassed cannot exceed requiredTotal')
-    }
-    return await this.updateTask(expected, current => ({ ...current, validation: summary }))
+    return await this.updateTask(expected, current => {
+      const validators = current.validationPolicy?.validators
+      if (validators === undefined) {
+        throw new WorkItemTransitionError(`task '${expected.id}' has no validation policy`)
+      }
+      const requiredTotal = countRequired(validators)
+      if (!Number.isInteger(summary.requiredPassed) || summary.requiredPassed < 0) {
+        throw new WorkItemTransitionError('requiredPassed must be a non-negative integer')
+      }
+      if (summary.requiredTotal !== requiredTotal) {
+        throw new WorkItemTransitionError(
+          `requiredTotal ${summary.requiredTotal} does not match task policy required count ${requiredTotal}`,
+        )
+      }
+      if (summary.requiredPassed > requiredTotal) {
+        throw new WorkItemTransitionError('requiredPassed cannot exceed requiredTotal')
+      }
+      if (summary.state === 'passed' && summary.requiredPassed !== requiredTotal) {
+        throw new WorkItemTransitionError('validation cannot pass before every required validator passes')
+      }
+      return { ...current, validation: summary }
+    })
   }
 
   /**
-   * Delete a passive idea. Executable tasks are retained for explicit cancellation/archive policy elsewhere.
+   * Delete a passive idea. Promotion and deletion are serialized before either commit point.
    * @param expected - Exact idea revision.
    * @returns whether the idea was removed.
    */
-  async deleteIdea(expected: WorkItemRef): Promise<boolean> {
-    const current = this.requireItem(expected.id)
-    assertRef(current, expected)
-    if (current.kind !== 'idea') {
-      throw new WorkItemTransitionError(`task '${expected.id}' cannot be deleted through deleteIdea`)
-    }
-    const deleted = await this.requireTable().delete(expected.id)
-    if (deleted) this.emitChanged({ operation: 'delete', ref: { id: expected.id, revision: expected.revision + 1 } })
-    return deleted
+  deleteIdea(expected: WorkItemRef): Promise<boolean> {
+    return this.enqueueIdeaTransition(async () => {
+      const current = this.requireItem(expected.id)
+      assertRef(current, expected)
+      if (current.kind !== 'idea') {
+        throw new WorkItemTransitionError(`task '${expected.id}' cannot be deleted through deleteIdea`)
+      }
+      const deleted = await this.requireTable().delete(expected.id)
+      if (deleted) {
+        this.emitChanged({ operation: 'delete', ref: { id: expected.id, revision: expected.revision + 1 } })
+      }
+      return deleted
+    })
   }
 
   private list(): WorkItem[] {
@@ -332,7 +366,8 @@ export class WorkControlService extends Service {
 
   private async updateTask(
     expected: WorkItemRef,
-    mutate: (current: TaskWorkItem) => Omit<TaskWorkItem, 'revision' | 'updatedAt'> & Partial<Pick<TaskWorkItem, 'revision' | 'updatedAt'>>,
+    mutate: (current: TaskWorkItem) => Omit<TaskWorkItem, 'revision' | 'updatedAt'>
+      & Partial<Pick<TaskWorkItem, 'revision' | 'updatedAt'>>,
   ): Promise<TaskWorkItem> {
     const next = await this.requireTable().update(expected.id, current => {
       assertRef(current, expected)
@@ -351,6 +386,12 @@ export class WorkControlService extends Service {
     return task
   }
 
+  private enqueueIdeaTransition<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.ideaTransitionTail.then(operation)
+    this.ideaTransitionTail = result.then(() => undefined, () => undefined)
+    return result
+  }
+
   private requireItem(id: WorkItemId): WorkItem {
     const item = this.get(id)
     if (item === undefined) throw new WorkItemNotFoundError(id)
@@ -363,7 +404,12 @@ export class WorkControlService extends Service {
   }
 
   private emitChanged(change: WorkItemChanged): void {
-    this.ctx.emit('work-control/changed', change)
+    try {
+      this.ctx.emit('work-control/changed', change)
+    } catch (error) {
+      // The domain write already committed; an observer cannot retroactively reject it.
+      this.ctx.logger.warn(`work-control: work-control/changed listener failed: ${String(error)}`)
+    }
   }
 }
 
@@ -399,9 +445,31 @@ function validateWorkflow(workflow: OrganizeTaskRequest['workflow']): void {
   }
 }
 
-function initialValidation(validators: OrganizeTaskRequest['validationPolicy']['validators']): ValidationSummary {
-  const requiredTotal = validators.filter(validator => validator.requirement === 'required').length
-  return { state: 'pending', requiredPassed: 0, requiredTotal }
+function validateValidators(validators: readonly ValidatorSpec[]): void {
+  for (const validator of validators) {
+    if (validator.label.trim().length === 0) {
+      throw new WorkItemTransitionError('validator label must not be empty')
+    }
+  }
+}
+
+function countRequired(validators: readonly ValidatorSpec[]): number {
+  return validators.filter(validator => validator.requirement === 'required').length
+}
+
+function initialValidation(validators: readonly ValidatorSpec[]): ValidationSummary {
+  return { state: 'pending', requiredPassed: 0, requiredTotal: countRequired(validators) }
+}
+
+function assertRequiredValidationPassed(task: TaskWorkItem): void {
+  const requiredTotal = countRequired(task.validationPolicy?.validators ?? [])
+  if (requiredTotal === 0) return
+  const validation = task.validation
+  if (validation?.state !== 'passed' || validation.requiredPassed !== requiredTotal) {
+    throw new WorkItemTransitionError(
+      `task '${task.id}' cannot complete before all ${requiredTotal} required validators pass`,
+    )
+  }
 }
 
 export default WorkControlService

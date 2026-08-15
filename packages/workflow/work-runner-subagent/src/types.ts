@@ -64,3 +64,10 @@ export interface WorkRunnerSubagentRequestEvent {
   readonly maxPromptBytes: number
   readonly prompt: string
 }
+
+declare module '@deepseek-ai/dsh-session/types' {
+  interface SessionEventMap {
+    /** Exact model-visible prompt submitted to a work runner through the subagent bridge. */
+    'work-runner/subagent-request': WorkRunnerSubagentRequestEvent
+  }
+}

@@ -47,15 +47,6 @@ export function ExecutionThreadId(id: string): ExecutionThreadId {
   return id as ExecutionThreadId
 }
 
-/** A request named no durable execution thread. */
-export class ExecutionThreadNotFoundError extends Error {
-  /** @param id - Missing thread id. */
-  constructor(readonly id: ExecutionThreadId) {
-    super(`unknown execution thread '${id}'`)
-    this.name = 'ExecutionThreadNotFoundError'
-  }
-}
-
 /** A compare-and-set mutation used a stale execution-thread revision. */
 export class ExecutionThreadConflictError extends Error {
   /**
@@ -77,14 +68,14 @@ export class ExecutionThreadTransitionError extends Error {
   }
 }
 
-/** A task cannot currently admit a new execution thread. */
+/** A task cannot currently admit execution work. */
 export class ExecutionTaskUnavailableError extends Error {
   /**
    * @param taskId - Task that cannot admit execution.
    * @param reason - Current task-state reason.
    */
   constructor(readonly taskId: WorkItemId, reason: string) {
-    super(`task '${taskId}' cannot create an execution thread: ${reason}`)
+    super(`task '${taskId}' cannot admit execution: ${reason}`)
     this.name = 'ExecutionTaskUnavailableError'
   }
 }
@@ -121,7 +112,7 @@ export class WorkExecutionService extends Service {
   }
 
   /**
-   * Create one independent execution effort for an already organized, non-terminal task.
+   * Create one independent execution effort for an organized task that is currently running.
    * Multiple threads may reference the same task; this is the safe fan-out unit for later P0 scheduling.
    * @param request - Task identity to attach.
    * @returns the durable idle thread.
@@ -183,7 +174,7 @@ export class WorkExecutionService extends Service {
       this.assertTaskAdmitsExecution(current.taskId)
       const seq = current.attemptSeq + 1
       return {
-        ...current,
+        ...withoutBlocker(current),
         state: 'running',
         attemptSeq: seq,
         activeAttempt: {
@@ -193,7 +184,6 @@ export class WorkExecutionService extends Service {
           ...request.subagentSessionId === undefined ? {} : { subagentSessionId: request.subagentSessionId },
           startedAt: new Date().toISOString(),
         },
-        blocker: undefined,
       }
     })
   }
@@ -210,16 +200,16 @@ export class WorkExecutionService extends Service {
     request: SettleExecutionAttemptRequest,
   ): Promise<ExecutionThread> {
     return await this.updateThread(expected, current => {
-      if (current.state !== 'running' || current.activeAttempt === undefined) {
+      const activeAttempt = current.activeAttempt
+      if (current.state !== 'running' || activeAttempt === undefined) {
         throw new ExecutionThreadTransitionError(`thread '${expected.id}' has no active attempt`)
       }
       const finishedAt = new Date().toISOString()
       return {
-        ...current,
+        ...withoutActiveAttempt(current),
         state: 'idle',
-        activeAttempt: undefined,
         lastAttempt: {
-          ...current.activeAttempt,
+          ...activeAttempt,
           finishedAt,
           stopReason: request.stopReason,
         },
@@ -244,7 +234,7 @@ export class WorkExecutionService extends Service {
   }
 
   /**
-   * Return a blocked thread to idle.
+   * Return a blocked thread to idle after the owning task itself is running again.
    * @param expected - Exact blocked thread revision.
    * @returns the idle thread.
    */
@@ -254,7 +244,7 @@ export class WorkExecutionService extends Service {
         throw new ExecutionThreadTransitionError(`thread '${expected.id}' is not blocked`)
       }
       this.assertTaskAdmitsExecution(current.taskId)
-      return { ...current, state: 'idle', blocker: undefined }
+      return { ...withoutBlocker(current), state: 'idle' }
     })
   }
 
@@ -287,7 +277,7 @@ export class WorkExecutionService extends Service {
         )
       }
       const now = new Date().toISOString()
-      return { ...current, state, blocker: undefined, closedAt: now }
+      return { ...withoutBlocker(current), state, closedAt: now }
     })
   }
 
@@ -318,7 +308,7 @@ export class WorkExecutionService extends Service {
     if (item.kind !== 'task') {
       throw new ExecutionTaskUnavailableError(taskId, 'work item is still an idea')
     }
-    if (item.status !== 'running' && item.status !== 'blocked') {
+    if (item.status !== 'running') {
       throw new ExecutionTaskUnavailableError(taskId, `task status is ${item.status}`)
     }
   }
@@ -346,6 +336,18 @@ function assertRef(current: ExecutionThread, expected: ExecutionThreadRef): void
   if (current.revision !== expected.revision) {
     throw new ExecutionThreadConflictError(expected, current.revision)
   }
+}
+
+function withoutBlocker(thread: ExecutionThread): Omit<ExecutionThread, 'blocker'> {
+  const { blocker, ...rest } = thread
+  void blocker
+  return rest
+}
+
+function withoutActiveAttempt(thread: ExecutionThread): Omit<ExecutionThread, 'activeAttempt'> {
+  const { activeAttempt, ...rest } = thread
+  void activeAttempt
+  return rest
 }
 
 function requireText(value: string, field: string): string {

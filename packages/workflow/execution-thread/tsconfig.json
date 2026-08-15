@@ -1,0 +1,20 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../../../vendor/cosmokit" },
+    { "path": "../../../vendor/cordis" },
+    { "path": "../../core/agent" },
+    { "path": "../../core/session" },
+    { "path": "../../util/brand" },
+    { "path": "../../llm/llm" },
+    { "path": "../../storage/storage-domain" },
+    { "path": "../../subagent/subagent" },
+    { "path": "../work-control" },
+    { "path": "../../runtime-diagnostics/invariants" }
+  ]
+}

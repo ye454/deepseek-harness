@@ -1,0 +1,2 @@
+- id: work-runner-subagent
+  name: '@deepseek-ai/dsh-work-runner-subagent'

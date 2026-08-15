@@ -267,6 +267,7 @@
     { "path": "./packages/jobs/tool-jobs" },
     { "path": "./packages/workflow/work-control" },
     { "path": "./packages/workflow/work-execution" },
+    { "path": "./packages/workflow/work-runner-subagent" },
     { "path": "./packages/workflow/workflow" },
     { "path": "./packages/workflow/workflow-worker-thread" },
     { "path": "./packages/workflow/tool-workflow" },

@@ -5,33 +5,34 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { SubagentProvider, SubagentRun, SubagentRuntime, SubagentStartRequest } from '@deepseek-ai/dsh-subagent'
 import { WorkItemId } from '@deepseek-ai/dsh-work-control'
+import type { TaskWorkItem } from '@deepseek-ai/dsh-work-control'
 import type WorkControlService from '@deepseek-ai/dsh-work-control'
 import { ExecutionThreadId } from '@deepseek-ai/dsh-work-execution'
-import type { ExecutionThread, ExecutionThreadRef } from '@deepseek-ai/dsh-work-execution'
+import type { ExecutionStopReason, ExecutionThread, ExecutionThreadRef } from '@deepseek-ai/dsh-work-execution'
 import type WorkExecutionService from '@deepseek-ai/dsh-work-execution'
 import WorkSubagentRunner, { WorkPromptBudgetError, WorkRunnerPreflightError } from '../src/index.ts'
 
 const taskId = WorkItemId('task-1')
 const threadId = ExecutionThreadId('thread-1')
 
-function task() {
+function task(): TaskWorkItem {
   return {
-    kind: 'task' as const,
+    kind: 'task',
     id: taskId,
     revision: 3,
     title: 'Fix navigation',
     summary: 'Investigate drift only',
     tags: [],
-    priority: 'p0' as const,
-    status: 'running' as const,
-    taskType: 'bug-fix' as const,
-    workflow: { version: 1, stages: [{ id: 'diagnose', title: 'Diagnose', kind: 'diagnosis' as const }] },
+    priority: 'p0',
+    status: 'running',
+    taskType: 'bug-fix',
+    workflow: { version: 1, stages: [{ id: 'diagnose', title: 'Diagnose', kind: 'diagnosis' }] },
     currentStageId: 'diagnose',
     validationPolicy: {
       version: 1,
-      validators: [{ kind: 'user-acceptance' as const, requirement: 'required' as const, label: 'Human device check' }],
+      validators: [{ kind: 'user-acceptance', requirement: 'required', label: 'Human device check' }],
     },
-    validation: { state: 'pending' as const, requiredPassed: 0, requiredTotal: 1 },
+    validation: { state: 'pending', requiredPassed: 0, requiredTotal: 1 },
     createdAt: '2026-08-15T00:00:00.000Z',
     promotedAt: '2026-08-15T00:01:00.000Z',
     updatedAt: '2026-08-15T00:02:00.000Z',
@@ -69,7 +70,7 @@ async function harness(options: {
   const ctx = new Context()
   let current = idleThread()
   const beginCalls: unknown[] = []
-  const settleCalls: { stopReason: string }[] = []
+  const settleCalls: { stopReason: ExecutionStopReason }[] = []
   const startCalls: SubagentStartRequest[] = []
   const providerList = options.providers ?? [provider('codex')]
   const providers = new Map(providerList.map(item => [item.name, item]))
@@ -120,7 +121,7 @@ async function harness(options: {
       }
       return current
     },
-    settleAttempt: async (expected: ExecutionThreadRef, request: { stopReason: string }) => {
+    settleAttempt: async (expected: ExecutionThreadRef, request: { stopReason: ExecutionStopReason }) => {
       settleCalls.push(request)
       if (expected.revision !== current.revision) throw new Error('stale test settlement')
       const activeAttempt = current.activeAttempt
@@ -134,7 +135,7 @@ async function harness(options: {
         lastAttempt: {
           ...activeAttempt,
           finishedAt: '2026-08-15T00:05:00.000Z',
-          stopReason: request.stopReason as 'completed',
+          stopReason: request.stopReason,
         },
         updatedAt: '2026-08-15T00:05:00.000Z',
       }
@@ -202,8 +203,11 @@ describe('WorkSubagentRunner provider discovery and preflight', () => {
 describe('WorkSubagentRunner one-shot lifecycle', () => {
   it('logs the exact bounded child prompt before provider start, then records and settles the published attempt', async () => {
     const h = await harness()
-    const originalStart = (h.ctx.subagents as unknown as { start: (name: string, request: SubagentStartRequest) => Promise<SubagentRun> }).start
-    ;(h.ctx.subagents as unknown as { start: (name: string, request: SubagentStartRequest) => Promise<SubagentRun> }).start = async (name, request) => {
+    const mutableSubagents = h.ctx.subagents as unknown as {
+      start: (name: string, request: SubagentStartRequest) => Promise<SubagentRun>
+    }
+    const originalStart = mutableSubagents.start
+    mutableSubagents.start = async (name, request) => {
       const event = h.session.events.at(-1)
       expect(event?.type).toBe('work-runner/subagent-request')
       if (event?.type !== 'work-runner/subagent-request') throw new Error('missing runner request event')
@@ -244,7 +248,7 @@ describe('WorkSubagentRunner one-shot lifecycle', () => {
     const failingRun: SubagentRun = {
       id: SessionId('child-failure'),
       localAgent: undefined,
-      result: Promise.reject(new Error('transport lost')),
+      result: new Promise((_resolve, reject) => { queueMicrotask(() => reject(new Error('transport lost'))) }),
       dispose: vi.fn(async () => {}),
     }
     const h = await harness({ run: failingRun })

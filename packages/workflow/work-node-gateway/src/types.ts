@@ -84,6 +84,11 @@ export type RemoteNodeCommand =
       readonly settledAt?: string
     }
 
+/** Post-commit command notification used by observers and the package invariant. */
+export interface RemoteNodeCommandChanged {
+  readonly command: RemoteNodeCommand
+}
+
 /** One environment report carried in a heartbeat/poll request. */
 export interface RemoteEnvironmentReport {
   readonly key: string

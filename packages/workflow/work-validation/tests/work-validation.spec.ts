@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
-import WorkControlService from '@deepseek-ai/dsh-work-control'
+import WorkControlService, { type TaskWorkItem, type WorkItemId } from '@deepseek-ai/dsh-work-control'
 import WorkValidationService from '../src/index.ts'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 
@@ -16,6 +16,12 @@ async function harness() {
   await ctx.plugin(WorkControlService)
   await ctx.plugin(WorkValidationService)
   return ctx
+}
+
+function currentTask(ctx: Context, id: WorkItemId): TaskWorkItem {
+  const item = ctx.workControl.get(id)
+  if (item?.kind !== 'task') throw new Error(`expected task '${id}'`)
+  return item
 }
 
 async function taskWithUserGate(ctx: Context) {
@@ -47,7 +53,7 @@ describe('work-validation evidence-backed completion', () => {
     const task = await taskWithUserGate(ctx)
     const session = await ctx.workValidation.beginValidation({ id: task.id, revision: task.revision })
 
-    expect(ctx.workControl.get(task.id)).toMatchObject({
+    expect(currentTask(ctx, task.id)).toMatchObject({
       status: 'validation',
       validation: { state: 'pending', requiredPassed: 0, requiredTotal: 2 },
     })
@@ -59,10 +65,10 @@ describe('work-validation evidence-backed completion', () => {
       outcome: 'passed',
       evidence: [{ kind: 'test', label: 'worker smoke', reference: 'ci:run-142' }],
     })
-    let current = ctx.workControl.get(task.id)
+    let current = currentTask(ctx, task.id)
     expect(current).toMatchObject({ validation: { state: 'pending', requiredPassed: 1, requiredTotal: 2 } })
     await expect(
-      ctx.workControl.setStatus({ id: task.id, revision: current!.revision }, 'done'),
+      ctx.workControl.setStatus({ id: task.id, revision: current.revision }, 'done'),
     ).rejects.toThrow(/cannot complete/)
 
     await ctx.workValidation.recordUserAcceptance({
@@ -73,9 +79,9 @@ describe('work-validation evidence-backed completion', () => {
       actor: 'local-user',
       note: 'Behavior accepted in the task detail view',
     })
-    current = ctx.workControl.get(task.id)
+    current = currentTask(ctx, task.id)
     expect(current).toMatchObject({ validation: { state: 'passed', requiredPassed: 2, requiredTotal: 2 } })
-    const done = await ctx.workControl.setStatus({ id: task.id, revision: current!.revision }, 'done')
+    const done = await ctx.workControl.setStatus({ id: task.id, revision: current.revision }, 'done')
     expect(done.status).toBe('done')
     await ctx.fiber.dispose()
   })
@@ -126,12 +132,12 @@ describe('work-validation evidence-backed completion', () => {
       outcome: 'passed',
       evidence: [{ kind: 'test', label: 'regression', reference: 'ci:first' }],
     })
-    let current = ctx.workControl.get(task.id)!
+    let current = currentTask(ctx, task.id)
     expect(current.validation?.state).toBe('passed')
 
     const second = await ctx.workValidation.beginValidation({ id: task.id, revision: current.revision })
     expect(second.generation).toBe(first.generation + 1)
-    current = ctx.workControl.get(task.id)!
+    current = currentTask(ctx, task.id)
     expect(current.validation).toMatchObject({ state: 'pending', requiredPassed: 0, requiredTotal: 1 })
     expect(ctx.workValidation.listResults(task.id)).toEqual([])
     expect(ctx.workValidation.listResults(task.id, first.generation)).toHaveLength(1)
@@ -150,7 +156,7 @@ describe('work-validation evidence-backed completion', () => {
       outcome: 'failed',
       evidence: [{ kind: 'log', label: 'diagnostic warning', reference: 'log:worker-7' }],
     })
-    expect(ctx.workControl.get(task.id)?.validation?.state).toBe('pending')
+    expect(currentTask(ctx, task.id).validation?.state).toBe('pending')
 
     await ctx.workValidation.recordAutomatedResult({
       taskId: task.id,
@@ -159,7 +165,7 @@ describe('work-validation evidence-backed completion', () => {
       outcome: 'failed',
       evidence: [{ kind: 'test', label: 'worker smoke', reference: 'ci:failed-7' }],
     })
-    expect(ctx.workControl.get(task.id)?.validation).toMatchObject({
+    expect(currentTask(ctx, task.id).validation).toMatchObject({
       state: 'failed', requiredPassed: 0, requiredTotal: 2,
     })
     await ctx.fiber.dispose()

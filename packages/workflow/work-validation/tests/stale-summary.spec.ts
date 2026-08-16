@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
-import WorkControlService from '@deepseek-ai/dsh-work-control'
+import WorkControlService, { type TaskWorkItem, type WorkItemId } from '@deepseek-ai/dsh-work-control'
 import WorkValidationService from '../src/index.ts'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 
@@ -16,6 +16,12 @@ async function harness() {
   await ctx.plugin(WorkControlService)
   await ctx.plugin(WorkValidationService)
   return ctx
+}
+
+function currentTask(ctx: Context, id: WorkItemId): TaskWorkItem {
+  const item = ctx.workControl.get(id)
+  if (item?.kind !== 'task') throw new Error(`expected task '${id}'`)
+  return item
 }
 
 describe('work-control validation invalidation', () => {
@@ -47,7 +53,7 @@ describe('work-control validation invalidation', () => {
       evidence: [{ kind: 'test', label: 'regression', reference: 'ci:before-more-work' }],
     })
 
-    let current = ctx.workControl.get(task.id)!
+    let current = currentTask(ctx, task.id)
     expect(current.validation).toMatchObject({ state: 'passed', requiredPassed: 1, requiredTotal: 1 })
 
     current = await ctx.workControl.setStatus({ id: task.id, revision: current.revision }, 'running')

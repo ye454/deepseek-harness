@@ -5,7 +5,7 @@
 
 import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { SessionId } from '@deepseek-ai/dsh-session'
-import type { ExecutionStopReason, ExecutionThreadId } from '@deepseek-ai/dsh-work-execution'
+import type { ExecutionStopReason, ExecutionThreadId, RunnerMode } from '@deepseek-ai/dsh-work-execution'
 import type { WorkEnvironmentId, WorkEnvironmentSnapshot, WorkEnvironmentState } from '@deepseek-ai/dsh-work-environment'
 import type { WorkNodeFeature, WorkNodeId, WorkNodeState } from '@deepseek-ai/dsh-work-node'
 
@@ -40,6 +40,7 @@ export interface RemoteExecutePayload {
   readonly environmentId: WorkEnvironmentId
   readonly environmentRevision: number
   readonly runnerProvider: string
+  readonly mode: RunnerMode
   readonly prompt: string
   readonly promptBytes: number
   readonly resumeSessionId?: SessionId

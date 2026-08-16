@@ -19,6 +19,7 @@ export const workNodeDaemonJournalRecord = z.object({
   state: z.enum(['starting', 'published', 'accepted', 'settled', 'rejected', 'interrupted']),
   sessionId: z.string().transform(SessionId).optional(),
   stopReason: stopReason.optional(),
+  reportedAt: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 })

@@ -15,21 +15,14 @@
       "types": "./lib/types/invariant.d.ts",
       "default": "./lib/invariant.js"
     },
-    "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
   "files": [
     "lib/index.js",
     "lib/invariant.js",
-    "cordis.patch.yml",
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",
-  "dsh": {
-    "bundle": {
-      "patch": "./cordis.patch.yml"
-    }
-  },
   "dependencies": {
     "@deepseek-ai/schemastery": "workspace:^",
     "zod": "^4.4.3"

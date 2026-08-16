@@ -20,6 +20,7 @@ const feature = z.enum([
 ])
 const commandId = z.string().transform(value => value as RemoteNodeCommandId)
 
+/** Strict initial hello request parser at the HTTP JSON boundary. */
 export const helloRequest = z.object({
   nodeKey: z.string(),
   name: z.string(),
@@ -36,6 +37,7 @@ const environmentReport = z.object({
   snapshot: workEnvironmentSnapshot,
 }).strict()
 
+/** Strict heartbeat/environment/command-poll request parser. */
 export const pollRequest = z.object({
   nodeKey: z.string(),
   nodeRevision: z.number().int().positive(),
@@ -47,6 +49,7 @@ export const pollRequest = z.object({
   environments: z.array(environmentReport),
 }).strict()
 
+/** Strict remote Runner publication/refusal acknowledgement parser. */
 export const ackRequest = z.object({
   nodeKey: z.string(),
   commandId,
@@ -54,6 +57,7 @@ export const ackRequest = z.object({
   subagentSessionId: z.string().transform(SessionId).optional(),
 }).strict()
 
+/** Strict terminal remote Runner result parser. */
 export const resultRequest = z.object({
   nodeKey: z.string(),
   commandId,

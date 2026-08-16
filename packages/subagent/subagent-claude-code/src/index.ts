@@ -3,6 +3,9 @@
  * the official Agent SDK in the delegating Session's workspace and places
  * the SDK-spawned real CLI under the shared subprocess owner.
  *
+ * The package also exports the parent-Agent-independent one-shot runtime so
+ * remote WorkNode adapters reuse the same official Agent SDK implementation.
+ *
  * @module @deepseek-ai/dsh-subagent-claude-code
  */
 
@@ -22,6 +25,17 @@ import {
   startClaudeCodeRun,
   type ClaudeCodeRunSpec,
 } from './run.ts'
+
+export {
+  claudeQueryOptions,
+  consumeClaudeQuery,
+  DEFAULT_DISPOSE_GRACE_MS,
+  disposeClaudeCodeChild,
+  startClaudeCodeRun,
+  successfulResult,
+  textTask,
+} from './run.ts'
+export type { ClaudeCodeRunRequest, ClaudeCodeRunSpec } from './run.ts'
 
 export const name = 'subagent-claude-code'
 export const inject = ['subagents', 'subprocess']

@@ -3,15 +3,16 @@
  * @module @deepseek-ai/dsh-work-node-gateway
  */
 
-import { randomUUID, timingSafeEqual } from 'node:crypto'
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { clearInterval, setInterval } from 'node:timers'
 import { Context, Service } from '@deepseek-ai/cordis'
 import s from '@deepseek-ai/schemastery'
 import { credentialRef, type CredentialRef } from '@deepseek-ai/dsh-credentials'
+import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { KvTable } from '@deepseek-ai/dsh-storage-domain'
 import type { ExecutionThread, ExecutionThreadId, ExecutionThreadRef, RunnerMode } from '@deepseek-ai/dsh-work-execution'
-import type { WorkEnvironmentRef } from '@deepseek-ai/dsh-work-environment'
+import type { WorkEnvironment, WorkEnvironmentRef, WorkEnvironmentSnapshot } from '@deepseek-ai/dsh-work-environment'
 import { WorkNodeConflictError, type WorkNode, type WorkNodeId } from '@deepseek-ai/dsh-work-node'
 import { buildBoundedWorkPrompt, type WorkHandoff } from '@deepseek-ai/dsh-work-runner-subagent'
 import { workNodeGatewayDomainSpec } from './spec.ts'
@@ -26,6 +27,7 @@ import type {
   RemoteEnvironmentReport,
   RemoteNodeAckRequest,
   RemoteNodeCommand,
+  RemoteNodeCommandChanged,
   RemoteNodeCommandId as RemoteNodeCommandIdBrand,
   RemoteNodeHelloRequest,
   RemoteNodeHelloResponse,
@@ -51,6 +53,7 @@ export function RemoteNodeCommandId(id: string): RemoteNodeCommandId {
 }
 
 const NODE_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
+const SIGNATURE_PATTERN = /^[0-9a-f]{64}$/
 const HELLO_PATH = '/work-node/v1/hello'
 const POLL_PATH = '/work-node/v1/poll'
 const ACK_PATH = '/work-node/v1/ack'
@@ -66,6 +69,8 @@ export interface Config {
   maxPromptBytes: number
   /** Maximum queued commands returned by one poll. */
   maxCommandsPerPoll: number
+  /** Maximum accepted absolute difference between signed request time and host time. */
+  maxClockSkewMs: number
   /** A node older than this threshold is eligible for offline marking. */
   heartbeatTimeoutMs: number
   /** How often the gateway checks heartbeat age. */
@@ -92,10 +97,19 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     workNodeGateway: WorkNodeGateway
   }
+
+  interface Events {
+    /**
+     * One remote command mutation committed durably.
+     * @param change - Current durable command projection.
+     * @mode emit
+     */
+    'work-node-gateway/command-changed'(change: RemoteNodeCommandChanged): void
+  }
 }
 
 /**
- * Durable command queue plus authenticated HTTP pull transport. Remote nodes call hello/poll/ack/result;
+ * Durable command queue plus authenticated HTTP-pull transport. Remote nodes call hello/poll/ack/result;
  * local scheduler consumers enqueue commands through this service.
  */
 export class WorkNodeGateway extends Service {
@@ -114,6 +128,7 @@ export class WorkNodeGateway extends Service {
     maxRequestBodyBytes: s.natural().required(),
     maxPromptBytes: s.natural().required(),
     maxCommandsPerPoll: s.natural().required(),
+    maxClockSkewMs: s.natural().required(),
     heartbeatTimeoutMs: s.natural().required(),
     sweepIntervalMs: s.natural().required(),
   })
@@ -129,10 +144,11 @@ export class WorkNodeGateway extends Service {
     requirePositive(config.maxRequestBodyBytes, 'maxRequestBodyBytes')
     requirePositive(config.maxPromptBytes, 'maxPromptBytes')
     requirePositive(config.maxCommandsPerPoll, 'maxCommandsPerPoll')
+    requirePositive(config.maxClockSkewMs, 'maxClockSkewMs')
     requirePositive(config.heartbeatTimeoutMs, 'heartbeatTimeoutMs')
     requirePositive(config.sweepIntervalMs, 'sweepIntervalMs')
     for (const [nodeKey, rawRef] of Object.entries(config.nodes)) {
-      requireNodeKey(nodeKey)
+      validateConfiguredNodeKey(nodeKey)
       this.authRefs.set(nodeKey, credentialRef(rawRef))
     }
   }
@@ -145,16 +161,24 @@ export class WorkNodeGateway extends Service {
     this.commands = domain.table('commands')
 
     this.ctx.effect(() => this.ctx.webServer.register({
-      kind: 'exact', path: HELLO_PATH, handler: (req, res) => this.handle(req, res, helloRequest, body => this.hello(body)),
+      kind: 'exact',
+      path: HELLO_PATH,
+      handler: (req, res) => this.handle(req, res, HELLO_PATH, helloRequest, body => this.hello(body)),
     }), 'workNodeGateway.helloRoute')
     this.ctx.effect(() => this.ctx.webServer.register({
-      kind: 'exact', path: POLL_PATH, handler: (req, res) => this.handle(req, res, pollRequest, body => this.poll(body)),
+      kind: 'exact',
+      path: POLL_PATH,
+      handler: (req, res) => this.handle(req, res, POLL_PATH, pollRequest, body => this.poll(body)),
     }), 'workNodeGateway.pollRoute')
     this.ctx.effect(() => this.ctx.webServer.register({
-      kind: 'exact', path: ACK_PATH, handler: (req, res) => this.handle(req, res, ackRequest, body => this.ack(body)),
+      kind: 'exact',
+      path: ACK_PATH,
+      handler: (req, res) => this.handle(req, res, ACK_PATH, ackRequest, body => this.ack(body)),
     }), 'workNodeGateway.ackRoute')
     this.ctx.effect(() => this.ctx.webServer.register({
-      kind: 'exact', path: RESULT_PATH, handler: (req, res) => this.handle(req, res, resultRequest, body => this.result(body)),
+      kind: 'exact',
+      path: RESULT_PATH,
+      handler: (req, res) => this.handle(req, res, RESULT_PATH, resultRequest, body => this.result(body)),
     }), 'workNodeGateway.resultRoute')
 
     const timer = setInterval(() => {
@@ -178,11 +202,13 @@ export class WorkNodeGateway extends Service {
     mode: RunnerMode,
     handoff?: WorkHandoff,
   ): Promise<RemoteNodeCommand> {
+    if (mode === 'continuable') this.requireNodeFeatureForThread(threadRef.id, 'resume')
     return await this.enqueueExecutionCommand('execute', threadRef, runnerProvider, mode, handoff)
   }
 
   /**
-   * Queue native continuation for the previous continuable attempt.
+   * Queue native continuation for the previous continuable attempt. Native continuation is admitted only when
+   * the selected environment is still on the same node that published the retained native session.
    * @param threadRef - Exact idle execution thread revision.
    * @param runnerProvider - Provider that owns the previous native session.
    * @param handoff - Optional compact continuation conclusions.
@@ -203,6 +229,15 @@ export class WorkNodeGateway extends Service {
     ) {
       throw new WorkNodeGatewayError(`thread '${thread.id}' has no resumable '${runnerProvider}' attempt`)
     }
+    const binding = this.ctx.workEnvironments.getBinding(thread.id)
+    if (binding === undefined) throw new WorkNodeGatewayError(`thread '${thread.id}' has no environment binding`)
+    const origin = this.findRemoteSessionOrigin(thread.id, runnerProvider, previous.subagentSessionId)
+    if (origin === undefined || origin.nodeId !== binding.nodeId) {
+      throw new WorkNodeGatewayError(
+        `thread '${thread.id}' native session is not owned by the currently bound node; use system handoff instead`,
+      )
+    }
+    this.requireNodeFeature(binding.nodeId, 'resume')
     return await this.enqueueExecutionCommand(
       'resume',
       threadRef,
@@ -226,6 +261,7 @@ export class WorkNodeGateway extends Service {
     }
     const binding = this.ctx.workEnvironments.getBinding(threadId)
     if (binding === undefined) throw new WorkNodeGatewayError(`thread '${threadId}' has no environment binding`)
+    this.requireNodeFeature(binding.nodeId, 'cancel')
     const now = new Date().toISOString()
     const command: RemoteNodeCommand = {
       id: RemoteNodeCommandId(randomUUID()),
@@ -236,11 +272,25 @@ export class WorkNodeGateway extends Service {
       createdAt: now,
       updatedAt: now,
     }
-    await this.requireCommandTable().put(command.id, command)
+    await this.storeNewCommand(command)
     return command
   }
 
-  /** List current gateway commands, optionally for one node. */
+  /**
+   * Read one current remote command.
+   * @param id - Durable remote command id.
+   * @returns the current command or undefined.
+   */
+  getCommand(id: RemoteNodeCommandId): RemoteNodeCommand | undefined {
+    const record = this.requireCommandTable().get(id)
+    return record === undefined ? undefined : asCommand(record)
+  }
+
+  /**
+   * List gateway commands in creation order, optionally limited to one node.
+   * @param nodeId - Optional node filter.
+   * @returns a fresh command array.
+   */
   listCommands(nodeId?: WorkNodeId): RemoteNodeCommand[] {
     return [...this.requireCommandTable().entries()]
       .map(([, record]) => asCommand(record))
@@ -254,10 +304,11 @@ export class WorkNodeGateway extends Service {
     runnerProviderValue: string,
     mode: RunnerMode,
     handoff?: WorkHandoff,
-    resumeSessionId?: import('@deepseek-ai/dsh-session').SessionId,
+    resumeSessionId?: SessionId,
   ): Promise<RemoteNodeCommand> {
     const runnerProvider = requireText(runnerProviderValue, 'runner provider')
     const thread = this.requireIdleThread(threadRef)
+    this.assertNoOpenExecutionCommand(thread.id)
     const preflight = this.ctx.workEnvironments.preflight(thread.id, runnerProvider)
     if (!preflight.ok) {
       throw new WorkNodeGatewayError(`thread '${thread.id}' remote preflight failed: ${preflight.issues.join(', ')}`)
@@ -267,6 +318,10 @@ export class WorkNodeGateway extends Service {
     const environment = this.ctx.workEnvironments.get(binding.environmentId)
     if (environment === undefined || environment.revision !== binding.environmentRevision) {
       throw new WorkNodeGatewayError(`thread '${thread.id}' environment binding is not current`)
+    }
+    const environmentIdentity = this.findEnvironmentIdentity(environment.id)
+    if (environmentIdentity === undefined || this.getNodeIdentity(environmentIdentity.nodeKey)?.nodeId !== binding.nodeId) {
+      throw new WorkNodeGatewayError(`environment '${environment.id}' has no remote-node identity on the selected node`)
     }
     const item = this.ctx.workControl.get(thread.taskId)
     if (item === undefined || item.kind !== 'task' || item.status !== 'running') {
@@ -284,6 +339,7 @@ export class WorkNodeGateway extends Service {
         threadRevision: thread.revision,
         environmentId: environment.id,
         environmentRevision: environment.revision,
+        environmentKey: environmentIdentity.environmentKey,
         runnerProvider,
         mode,
         prompt: prompt.text,
@@ -293,12 +349,11 @@ export class WorkNodeGateway extends Service {
       createdAt: now,
       updatedAt: now,
     }
-    await this.requireCommandTable().put(command.id, command)
+    await this.storeNewCommand(command)
     return command
   }
 
   private async hello(request: RemoteNodeHelloRequest): Promise<RemoteNodeHelloResponse> {
-    await this.authenticateCurrentRequest(request.nodeKey)
     return await this.withNodeLock(request.nodeKey, async () => {
       let identity = this.getNodeIdentity(request.nodeKey)
       let node: WorkNode
@@ -321,13 +376,16 @@ export class WorkNodeGateway extends Service {
           features: request.features,
           state: 'online',
         })
+        await this.requireNodeIdentityTable().put(request.nodeKey, {
+          ...identity,
+          updatedAt: new Date().toISOString(),
+        })
       }
       return { nodeId: node.id, nodeRevision: node.revision }
     })
   }
 
   private async poll(request: RemoteNodePollRequest): Promise<RemoteNodePollResponse> {
-    await this.authenticateCurrentRequest(request.nodeKey)
     return await this.withNodeLock(request.nodeKey, async () => {
       const identity = this.requireNodeIdentity(request.nodeKey)
       const current = this.ctx.workNodes.get(identity.nodeId)
@@ -345,52 +403,81 @@ export class WorkNodeGateway extends Service {
       for (const report of request.environments) {
         await this.applyEnvironmentReport(request.nodeKey, node.id, report)
       }
-      const commands = this.listCommands(node.id)
-        .filter(command => command.state === 'queued')
-        .slice(0, this.config.maxCommandsPerPoll)
+
+      const commands: RemoteNodeCommand[] = []
+      for (const candidate of this.listCommands(node.id)) {
+        if (candidate.state !== 'queued') continue
+        const failureCode = this.deliveryFailure(candidate, node)
+        if (failureCode !== undefined) {
+          await this.rejectQueuedCommand(candidate, failureCode)
+          continue
+        }
+        commands.push(candidate)
+        if (commands.length >= this.config.maxCommandsPerPoll) break
+      }
       return { nodeId: node.id, nodeRevision: node.revision, commands }
     })
   }
 
   private async ack(request: RemoteNodeAckRequest): Promise<{ command: RemoteNodeCommand }> {
-    await this.authenticateCurrentRequest(request.nodeKey)
     return await this.withNodeLock(request.nodeKey, async () => {
       const identity = this.requireNodeIdentity(request.nodeKey)
       const current = this.requireCommand(request.commandId)
-      if (current.nodeId !== identity.nodeId) throw new HttpGatewayError(403, 'COMMAND_NODE_MISMATCH', 'command belongs to another node')
+      if (current.nodeId !== identity.nodeId) {
+        throw new HttpGatewayError(403, 'COMMAND_NODE_MISMATCH', 'command belongs to another node')
+      }
       if (current.state !== 'queued') return { command: current }
 
       if (!request.accepted) {
-        const rejected = await this.updateCommand(current.id, command => ({
-          ...command,
-          state: 'rejected',
-          updatedAt: new Date().toISOString(),
-          settledAt: new Date().toISOString(),
-        }))
-        return { command: rejected }
+        return { command: await this.rejectQueuedCommand(current, 'REMOTE_REJECTED') }
       }
-
       if (current.kind === 'cancel') {
-        const settled = await this.updateCommand(current.id, command => ({
+        return { command: await this.updateCommand(current.id, command => ({
           ...command,
           state: 'settled',
           updatedAt: new Date().toISOString(),
           settledAt: new Date().toISOString(),
-        }))
-        return { command: settled }
+        })) }
       }
 
-      const running = await this.ctx.workExecution.beginAttempt(
-        { id: current.payload.threadId, revision: current.payload.threadRevision },
-        {
-          provider: current.payload.runnerProvider,
-          mode: current.payload.mode,
-          subagentSessionId: request.subagentSessionId,
-        },
-      )
+      if (current.payload.mode === 'continuable' && request.subagentSessionId === undefined) {
+        throw new HttpGatewayError(409, 'SESSION_REQUIRED', 'continuable command must publish a native session id')
+      }
+      if (
+        current.kind === 'resume'
+        && request.subagentSessionId !== current.payload.resumeSessionId
+      ) {
+        throw new HttpGatewayError(409, 'SESSION_MISMATCH', 'native resume must preserve the requested session id')
+      }
+
+      const node = this.ctx.workNodes.get(current.nodeId)
+      const failureCode = node === undefined ? 'NODE_MISSING' : this.deliveryFailure(current, node)
+      if (failureCode !== undefined) {
+        await this.rejectQueuedCommand(current, failureCode)
+        throw new HttpGatewayError(409, 'COMMAND_INVALIDATED', 'command became invalid before runner publication was recorded')
+      }
+
+      let running = this.reconcilePublishedAttempt(current, request.subagentSessionId)
+      if (running === undefined) {
+        try {
+          running = await this.ctx.workExecution.beginAttempt(
+            { id: current.payload.threadId, revision: current.payload.threadRevision },
+            {
+              provider: current.payload.runnerProvider,
+              mode: current.payload.mode,
+              subagentSessionId: request.subagentSessionId,
+            },
+          )
+        } catch {
+          await this.rejectQueuedCommand(current, 'ATTEMPT_COMMIT_FAILED')
+          throw new HttpGatewayError(409, 'ATTEMPT_COMMIT_FAILED', 'runner must stop because central attempt admission failed')
+        }
+      }
+
       const accepted = await this.updateCommand(current.id, command => ({
         ...command,
         state: 'accepted',
+        ...(request.subagentSessionId === undefined ? {} : { publishedSessionId: request.subagentSessionId }),
         acceptedThreadRevision: running.revision,
         updatedAt: new Date().toISOString(),
       }))
@@ -399,11 +486,12 @@ export class WorkNodeGateway extends Service {
   }
 
   private async result(request: RemoteNodeResultRequest): Promise<{ command: RemoteNodeCommand }> {
-    await this.authenticateCurrentRequest(request.nodeKey)
     return await this.withNodeLock(request.nodeKey, async () => {
       const identity = this.requireNodeIdentity(request.nodeKey)
       const current = this.requireCommand(request.commandId)
-      if (current.nodeId !== identity.nodeId) throw new HttpGatewayError(403, 'COMMAND_NODE_MISMATCH', 'command belongs to another node')
+      if (current.nodeId !== identity.nodeId) {
+        throw new HttpGatewayError(403, 'COMMAND_NODE_MISMATCH', 'command belongs to another node')
+      }
       if (current.kind === 'cancel') throw new HttpGatewayError(409, 'CONTROL_HAS_NO_RESULT', 'cancel commands settle through ack')
       if (current.state === 'settled') {
         if (current.resultStopReason !== request.stopReason) {
@@ -430,8 +518,9 @@ export class WorkNodeGateway extends Service {
   }
 
   private async applyEnvironmentReport(nodeKey: string, nodeId: WorkNodeId, report: RemoteEnvironmentReport): Promise<void> {
-    requireNodeKey(report.key)
+    validateWireNodeKey(report.key)
     const key = `${nodeKey}/${report.key}`
+    const canonicalSnapshot = canonicalizeSnapshot(report.snapshot)
     const identityRecord = this.requireEnvironmentIdentityTable().get(key)
     if (identityRecord === undefined) {
       const environment = await this.ctx.workEnvironments.registerEnvironment({
@@ -439,7 +528,7 @@ export class WorkNodeGateway extends Service {
         name: report.name,
         state: report.state,
         degradedReason: report.degradedReason,
-        snapshot: report.snapshot,
+        snapshot: canonicalSnapshot,
       })
       const now = new Date().toISOString()
       const identity: RemoteEnvironmentIdentity = {
@@ -453,17 +542,102 @@ export class WorkNodeGateway extends Service {
       await this.requireEnvironmentIdentityTable().put(key, identity)
       return
     }
+
     const identity = asEnvironmentIdentity(identityRecord)
     const environment = this.ctx.workEnvironments.get(identity.environmentId)
-    if (environment === undefined) throw new HttpGatewayError(409, 'ENVIRONMENT_IDENTITY_DANGLING', 'environment identity requires administrator repair')
+    if (environment === undefined) {
+      throw new HttpGatewayError(409, 'ENVIRONMENT_IDENTITY_DANGLING', 'environment identity requires administrator repair')
+    }
+    const nextState = report.state ?? 'ready'
+    const nextReason = report.degradedReason
+    const currentReason = environment.degradedReason
+    if (
+      environment.state === nextState
+      && currentReason === nextReason
+      && stableJson(environment.snapshot) === stableJson(canonicalSnapshot)
+    ) {
+      return
+    }
     await this.ctx.workEnvironments.refreshEnvironment(
       { id: environment.id, revision: environment.revision } satisfies WorkEnvironmentRef,
       {
         state: report.state,
         degradedReason: report.degradedReason,
-        snapshot: report.snapshot,
+        snapshot: canonicalSnapshot,
       },
     )
+  }
+
+  private deliveryFailure(command: RemoteNodeCommand, node: WorkNode): string | undefined {
+    if (node.state === 'offline') return 'NODE_OFFLINE'
+    if (node.state === 'degraded') return 'NODE_DEGRADED'
+    if (command.kind === 'cancel') {
+      if (!node.features.includes('cancel')) return 'NODE_CANCEL_UNSUPPORTED'
+      const thread = this.ctx.workExecution.get(command.payload.threadId)
+      if (thread?.state !== 'running' || thread.activeAttempt?.seq !== command.payload.attemptSeq) {
+        return 'ACTIVE_ATTEMPT_CHANGED'
+      }
+      const binding = this.ctx.workEnvironments.getBinding(command.payload.threadId)
+      return binding?.nodeId === node.id ? undefined : 'NODE_BINDING_CHANGED'
+    }
+
+    if (!node.features.includes('execute')) return 'NODE_EXECUTE_UNSUPPORTED'
+    if (command.payload.mode === 'continuable' && !node.features.includes('resume')) return 'NODE_RESUME_UNSUPPORTED'
+    if (!node.runnerProviders.includes(command.payload.runnerProvider)) return 'RUNNER_UNAVAILABLE'
+    const thread = this.ctx.workExecution.get(command.payload.threadId)
+    if (
+      thread === undefined
+      || thread.state !== 'idle'
+      || thread.activeAttempt !== undefined
+      || thread.revision !== command.payload.threadRevision
+    ) return 'THREAD_CHANGED'
+    const item = this.ctx.workControl.get(thread.taskId)
+    if (item === undefined || item.kind !== 'task' || item.status !== 'running') return 'TASK_NOT_RUNNING'
+    const binding = this.ctx.workEnvironments.getBinding(thread.id)
+    if (
+      binding === undefined
+      || binding.nodeId !== node.id
+      || binding.environmentId !== command.payload.environmentId
+      || binding.environmentRevision !== command.payload.environmentRevision
+    ) return 'ENVIRONMENT_BINDING_CHANGED'
+    const environment = this.ctx.workEnvironments.get(command.payload.environmentId)
+    if (environment === undefined) return 'ENVIRONMENT_MISSING'
+    if (environment.revision !== command.payload.environmentRevision) return 'ENVIRONMENT_STALE'
+    if (environment.state !== 'ready') return 'ENVIRONMENT_NOT_READY'
+    return undefined
+  }
+
+  private reconcilePublishedAttempt(command: Extract<RemoteNodeCommand, { kind: 'execute' | 'resume' }>, sessionId: SessionId | undefined): ExecutionThread | undefined {
+    const thread = this.ctx.workExecution.get(command.payload.threadId)
+    const active = thread?.activeAttempt
+    if (
+      thread?.state !== 'running'
+      || active === undefined
+      || active.provider !== command.payload.runnerProvider
+      || active.mode !== command.payload.mode
+      || active.subagentSessionId !== sessionId
+    ) return undefined
+    return thread
+  }
+
+  private findRemoteSessionOrigin(threadId: ExecutionThreadId, provider: string, sessionId: SessionId): Extract<RemoteNodeCommand, { kind: 'execute' | 'resume' }> | undefined {
+    return this.listCommands()
+      .filter((command): command is Extract<RemoteNodeCommand, { kind: 'execute' | 'resume' }> =>
+        command.kind !== 'cancel'
+        && command.state === 'settled'
+        && command.payload.threadId === threadId
+        && command.payload.runnerProvider === provider
+        && command.publishedSessionId === sessionId,
+      )
+      .at(-1)
+  }
+
+  private findEnvironmentIdentity(environmentId: import('@deepseek-ai/dsh-work-environment').WorkEnvironmentId): RemoteEnvironmentIdentity | undefined {
+    for (const [, record] of this.requireEnvironmentIdentityTable().entries()) {
+      const identity = asEnvironmentIdentity(record)
+      if (identity.environmentId === environmentId) return identity
+    }
+    return undefined
   }
 
   private requireIdleThread(expected: ExecutionThreadRef): ExecutionThread {
@@ -478,18 +652,25 @@ export class WorkNodeGateway extends Service {
     return current
   }
 
-  private async authenticateCurrentRequest(nodeKeyValue: string): Promise<void> {
-    const nodeKey = requireNodeKey(nodeKeyValue)
-    const ref = this.authRefs.get(nodeKey)
-    const request = currentRequest.getStore()
-    if (ref === undefined || request === undefined) throw new HttpGatewayError(401, 'UNAUTHORIZED', 'authentication failed')
-    const authorization = request.headers.authorization
-    if (authorization === undefined || !authorization.startsWith('Bearer ')) {
-      throw new HttpGatewayError(401, 'UNAUTHORIZED', 'authentication failed')
-    }
-    const credential = await this.ctx.credentials.resolve(ref)
-    if (credential === undefined || !safeSecretEqual(authorization.slice(7), credential.value)) {
-      throw new HttpGatewayError(401, 'UNAUTHORIZED', 'authentication failed')
+  private assertNoOpenExecutionCommand(threadId: ExecutionThreadId): void {
+    const open = this.listCommands().find(command =>
+      command.kind !== 'cancel'
+      && command.payload.threadId === threadId
+      && (command.state === 'queued' || command.state === 'accepted'),
+    )
+    if (open !== undefined) throw new WorkNodeGatewayError(`thread '${threadId}' already has open remote command '${open.id}'`)
+  }
+
+  private requireNodeFeatureForThread(threadId: ExecutionThreadId, feature: 'resume'): void {
+    const binding = this.ctx.workEnvironments.getBinding(threadId)
+    if (binding === undefined) throw new WorkNodeGatewayError(`thread '${threadId}' has no environment binding`)
+    this.requireNodeFeature(binding.nodeId, feature)
+  }
+
+  private requireNodeFeature(nodeId: WorkNodeId, feature: 'cancel' | 'resume'): void {
+    const node = this.ctx.workNodes.get(nodeId)
+    if (node === undefined || !node.features.includes(feature)) {
+      throw new WorkNodeGatewayError(`node '${nodeId}' does not advertise ${feature}`)
     }
   }
 
@@ -505,9 +686,14 @@ export class WorkNodeGateway extends Service {
   }
 
   private requireCommand(id: RemoteNodeCommandId): RemoteNodeCommand {
-    const record = this.requireCommandTable().get(id)
-    if (record === undefined) throw new HttpGatewayError(404, 'COMMAND_NOT_FOUND', 'unknown command')
-    return asCommand(record)
+    const command = this.getCommand(id)
+    if (command === undefined) throw new HttpGatewayError(404, 'COMMAND_NOT_FOUND', 'unknown command')
+    return command
+  }
+
+  private async storeNewCommand(command: RemoteNodeCommand): Promise<void> {
+    await this.requireCommandTable().put(command.id, command)
+    this.emitCommandChanged(command)
   }
 
   private async updateCommand(
@@ -515,7 +701,29 @@ export class WorkNodeGateway extends Service {
     mutate: (current: RemoteNodeCommand) => RemoteNodeCommand,
   ): Promise<RemoteNodeCommand> {
     const next = await this.requireCommandTable().update(id, record => mutate(asCommand(record)))
-    return asCommand(next)
+    const command = asCommand(next)
+    this.emitCommandChanged(command)
+    return command
+  }
+
+  private async rejectQueuedCommand(command: RemoteNodeCommand, failureCode: string): Promise<RemoteNodeCommand> {
+    if (command.state !== 'queued') return command
+    const now = new Date().toISOString()
+    return await this.updateCommand(command.id, current => ({
+      ...current,
+      state: 'rejected',
+      failureCode,
+      updatedAt: now,
+      settledAt: now,
+    }))
+  }
+
+  private emitCommandChanged(command: RemoteNodeCommand): void {
+    try {
+      this.ctx.emit('work-node-gateway/command-changed', { command })
+    } catch (error) {
+      this.ctx.logger.warn(`work-node-gateway: command observer failed: ${String(error)}`)
+    }
   }
 
   private async sweepOffline(): Promise<void> {
@@ -541,13 +749,14 @@ export class WorkNodeGateway extends Service {
     const previous = this.nodeTails.get(nodeKey) ?? Promise.resolve()
     let release!: () => void
     const next = new Promise<void>(resolve => { release = resolve })
-    this.nodeTails.set(nodeKey, previous.then(() => next, () => next))
+    const tail = previous.then(() => next, () => next)
+    this.nodeTails.set(nodeKey, tail)
     await previous.catch(() => {})
     try {
       return await operation()
     } finally {
       release()
-      if (this.nodeTails.get(nodeKey) === next) this.nodeTails.delete(nodeKey)
+      if (this.nodeTails.get(nodeKey) === tail) this.nodeTails.delete(nodeKey)
     }
   }
 
@@ -566,29 +775,33 @@ export class WorkNodeGateway extends Service {
     return this.commands
   }
 
-  private async handle<S extends { parse(value: unknown): unknown }>(
+  private async handle<T extends { nodeKey: string }>(
     req: IncomingMessage,
     res: ServerResponse,
-    schema: S,
-    operation: (body: ReturnType<S['parse']>) => Promise<unknown>,
+    path: string,
+    schema: { parse(value: unknown): T },
+    operation: (body: T) => Promise<unknown>,
   ): Promise<void> {
     try {
       if (req.method !== 'POST') throw new HttpGatewayError(405, 'METHOD_NOT_ALLOWED', 'POST required')
       const raw = await readBody(req, this.config.maxRequestBodyBytes)
+      const signedNodeKey = await this.authenticateRequest(req, path, raw)
       let json: unknown
       try {
         json = JSON.parse(raw)
       } catch {
         throw new HttpGatewayError(400, 'INVALID_JSON', 'request body must be valid JSON')
       }
-      let body: ReturnType<S['parse']>
+      let body: T
       try {
-        body = schema.parse(json) as ReturnType<S['parse']>
+        body = schema.parse(json)
       } catch {
         throw new HttpGatewayError(400, 'INVALID_REQUEST', 'request does not match protocol schema')
       }
-      const payload = await currentRequest.run(req, () => operation(body))
-      writeJson(res, 200, payload)
+      if (body.nodeKey !== signedNodeKey) {
+        throw new HttpGatewayError(401, 'NODE_KEY_MISMATCH', 'signed node key does not match request body')
+      }
+      writeJson(res, 200, await operation(body))
     } catch (error) {
       if (error instanceof HttpGatewayError) {
         writeJson(res, error.status, { error: { code: error.code, message: error.message } })
@@ -598,10 +811,26 @@ export class WorkNodeGateway extends Service {
       writeJson(res, 500, { error: { code: 'INTERNAL', message: 'internal gateway failure' } })
     }
   }
-}
 
-import { AsyncLocalStorage } from 'node:async_hooks'
-const currentRequest = new AsyncLocalStorage<IncomingMessage>()
+  private async authenticateRequest(req: IncomingMessage, path: string, rawBody: string): Promise<string> {
+    const nodeKeyHeader = singleHeader(req, 'x-dsh-node-key')
+    const timestampHeader = singleHeader(req, 'x-dsh-timestamp')
+    const signature = singleHeader(req, 'x-dsh-signature').toLowerCase()
+    const nodeKey = validateWireNodeKey(nodeKeyHeader)
+    const timestamp = Number(timestampHeader)
+    if (!Number.isSafeInteger(timestamp) || Math.abs(Date.now() - timestamp) > this.config.maxClockSkewMs) {
+      throw new HttpGatewayError(401, 'STALE_SIGNATURE', 'request timestamp is outside the configured clock-skew window')
+    }
+    if (!SIGNATURE_PATTERN.test(signature)) throw new HttpGatewayError(401, 'UNAUTHORIZED', 'authentication failed')
+    const ref = this.authRefs.get(nodeKey)
+    const credential = ref === undefined ? undefined : await this.ctx.credentials.resolve(ref)
+    if (credential === undefined) throw new HttpGatewayError(401, 'UNAUTHORIZED', 'authentication failed')
+    const material = `${req.method}\n${path}\n${timestampHeader}\n${rawBody}`
+    const expected = createHmac('sha256', credential.value).update(material).digest('hex')
+    if (!safeHexEqual(signature, expected)) throw new HttpGatewayError(401, 'UNAUTHORIZED', 'authentication failed')
+    return nodeKey
+  }
+}
 
 async function readBody(req: IncomingMessage, maxBytes: number): Promise<string> {
   const chunks: Buffer[] = []
@@ -617,18 +846,32 @@ async function readBody(req: IncomingMessage, maxBytes: number): Promise<string>
 
 function writeJson(res: ServerResponse, status: number, payload: unknown): void {
   const text = JSON.stringify(payload)
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(text) })
+  res.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'content-length': Buffer.byteLength(text),
+  })
   res.end(text)
 }
 
-function safeSecretEqual(candidate: string, expected: string): boolean {
-  const left = Buffer.from(candidate)
-  const right = Buffer.from(expected)
-  if (left.byteLength !== right.byteLength) return false
-  return timingSafeEqual(left, right)
+function singleHeader(req: IncomingMessage, name: string): string {
+  const value = req.headers[name]
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new HttpGatewayError(401, 'UNAUTHORIZED', 'authentication failed')
+  }
+  return value
 }
 
-function requireNodeKey(value: string): string {
+function safeHexEqual(candidate: string, expected: string): boolean {
+  if (!SIGNATURE_PATTERN.test(candidate) || !SIGNATURE_PATTERN.test(expected)) return false
+  return timingSafeEqual(Buffer.from(candidate, 'hex'), Buffer.from(expected, 'hex'))
+}
+
+function validateConfiguredNodeKey(value: string): string {
+  if (!NODE_KEY_PATTERN.test(value)) throw new TypeError(`configured node key '${value}' is invalid`)
+  return value
+}
+
+function validateWireNodeKey(value: string): string {
   if (!NODE_KEY_PATTERN.test(value)) throw new HttpGatewayError(400, 'INVALID_NODE_KEY', 'node key is invalid')
   return value
 }
@@ -641,6 +884,45 @@ function requireText(value: string, field: string): string {
 
 function requirePositive(value: number, field: string): void {
   if (!Number.isSafeInteger(value) || value <= 0) throw new TypeError(`${field} must be a positive safe integer`)
+}
+
+function canonicalizeSnapshot(snapshot: WorkEnvironmentSnapshot): WorkEnvironmentSnapshot {
+  const workspace = snapshot.workspace
+  const runtime = snapshot.runtime
+  return {
+    workspace: {
+      path: workspace.path.trim(),
+      ...(workspace.repository === undefined ? {} : { repository: workspace.repository.trim() }),
+      ...(workspace.branch === undefined ? {} : { branch: workspace.branch.trim() }),
+      ...(workspace.commit === undefined ? {} : { commit: workspace.commit.trim() }),
+      ...(workspace.worktree === undefined ? {} : { worktree: workspace.worktree.trim() }),
+      ...(workspace.dirty === undefined ? {} : { dirty: workspace.dirty }),
+    },
+    runtime: {
+      os: runtime.os.trim(),
+      arch: runtime.arch.trim(),
+      ...(runtime.shell === undefined ? {} : { shell: runtime.shell.trim() }),
+      versions: Object.fromEntries(
+        Object.entries(runtime.versions)
+          .map(([name, version]) => [name.trim(), version.trim()] as const)
+          .sort(([left], [right]) => left.localeCompare(right)),
+      ),
+    },
+    services: snapshot.services
+      .map(service => ({ ...service, name: service.name.trim() }))
+      .sort((left, right) => left.name.localeCompare(right.name)),
+    devices: normalizeStrings(snapshot.devices),
+    capabilities: normalizeStrings(snapshot.capabilities),
+    secretRefs: normalizeStrings(snapshot.secretRefs),
+  }
+}
+
+function normalizeStrings(values: readonly string[]): string[] {
+  return [...new Set(values.map(value => value.trim()).filter(Boolean))].sort()
+}
+
+function stableJson(value: WorkEnvironmentSnapshot): string {
+  return JSON.stringify(value)
 }
 
 function asNodeIdentity(record: RemoteNodeIdentityRecord): RemoteNodeIdentity {

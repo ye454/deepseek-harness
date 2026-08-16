@@ -68,7 +68,7 @@ export interface WorkValidatorResult {
 /** Current detailed validation projection for a Task. */
 export interface WorkValidationView {
   readonly task: TaskWorkItem
-  readonly session?: WorkValidationSession
+  readonly session: WorkValidationSession | undefined
   readonly results: readonly WorkValidatorResult[]
 }
 

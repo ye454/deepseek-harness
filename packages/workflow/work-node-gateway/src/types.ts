@@ -39,6 +39,7 @@ export interface RemoteExecutePayload {
   readonly threadRevision: number
   readonly environmentId: WorkEnvironmentId
   readonly environmentRevision: number
+  readonly environmentKey: string
   readonly runnerProvider: string
   readonly mode: RunnerMode
   readonly prompt: string
@@ -60,8 +61,13 @@ export type RemoteNodeCommand =
       readonly kind: 'execute' | 'resume'
       readonly state: RemoteNodeCommandState
       readonly payload: RemoteExecutePayload
+      /** Child/native session published by the remote Runner after acceptance. */
+      readonly publishedSessionId?: SessionId
+      /** ExecutionThread revision immediately after the accepted attempt was recorded. */
       readonly acceptedThreadRevision?: number
       readonly resultStopReason?: ExecutionStopReason
+      /** Stable machine-readable reason when delivery or remote admission rejects the command. */
+      readonly failureCode?: string
       readonly createdAt: string
       readonly updatedAt: string
       readonly settledAt?: string
@@ -72,6 +78,7 @@ export type RemoteNodeCommand =
       readonly kind: 'cancel'
       readonly state: RemoteNodeCommandState
       readonly payload: RemoteCancelPayload
+      readonly failureCode?: string
       readonly createdAt: string
       readonly updatedAt: string
       readonly settledAt?: string

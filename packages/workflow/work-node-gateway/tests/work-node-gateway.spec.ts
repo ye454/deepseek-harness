@@ -15,6 +15,7 @@ import WorkNodeGateway from '../src/index.ts'
 const SECRET = 'test-node-secret'
 const SECRET_REF = 'WORK_NODE_TEST_SECRET'
 const FEATURES = ['execute', 'cancel', 'resume', 'environment-report'] as const
+const RUNNERS = ['codex', 'fixture-continuable'] as const
 
 class TestCredentials extends CredentialProvider {
   constructor(ctx: Context) {
@@ -85,7 +86,7 @@ function helloBody() {
     nodeKey: 'pc2',
     name: 'G1-PC2',
     protocolVersion: 1,
-    runnerProviders: ['codex'],
+    runnerProviders: [...RUNNERS],
     features: [...FEATURES],
   }
 }
@@ -95,7 +96,7 @@ function pollBody(nodeRevision: number, commit = 'abc123') {
     nodeKey: 'pc2',
     nodeRevision,
     protocolVersion: 1,
-    runnerProviders: ['codex'],
+    runnerProviders: [...RUNNERS],
     features: [...FEATURES],
     environments: [{ key: 'main', name: 'G1 navigation', snapshot: snapshot(commit) }],
   }
@@ -206,7 +207,7 @@ describe('WorkNodeGateway durable execution lifecycle', () => {
 
     const queued = await ctx.workNodeGateway.enqueueExecute(
       { id: thread.id, revision: thread.revision },
-      'codex',
+      'fixture-continuable',
       'continuable',
       { facts: ['MID360 stream is healthy'], nextStep: 'Inspect localization drift' },
     )
@@ -217,7 +218,7 @@ describe('WorkNodeGateway durable execution lifecycle', () => {
         environmentId: environment.id,
         environmentRevision: environment.revision,
         environmentKey: 'main',
-        runnerProvider: 'codex',
+        runnerProvider: 'fixture-continuable',
         mode: 'continuable',
       },
     })
@@ -236,12 +237,12 @@ describe('WorkNodeGateway durable execution lifecycle', () => {
     expect(ctx.workExecution.get(thread.id)?.state).toBe('idle')
 
     const ack = await signedPost(ctx, '/work-node/v1/ack', {
-      nodeKey: 'pc2', commandId: queued.id, accepted: true, subagentSessionId: 'remote-codex-session-1',
+      nodeKey: 'pc2', commandId: queued.id, accepted: true, subagentSessionId: 'remote-session-1',
     })
     expect(ack.status).toBe(200)
     expect(ctx.workExecution.get(thread.id)).toMatchObject({
       state: 'running',
-      activeAttempt: { provider: 'codex', mode: 'continuable', subagentSessionId: 'remote-codex-session-1' },
+      activeAttempt: { provider: 'fixture-continuable', mode: 'continuable', subagentSessionId: 'remote-session-1' },
     })
 
     const result = await signedPost(ctx, '/work-node/v1/result', {
@@ -251,18 +252,51 @@ describe('WorkNodeGateway durable execution lifecycle', () => {
     const settledThread = ctx.workExecution.get(thread.id)
     expect(settledThread).toMatchObject({
       state: 'idle',
-      lastAttempt: { provider: 'codex', mode: 'continuable', subagentSessionId: 'remote-codex-session-1', stopReason: 'completed' },
+      lastAttempt: {
+        provider: 'fixture-continuable', mode: 'continuable', subagentSessionId: 'remote-session-1', stopReason: 'completed',
+      },
     })
 
     const resume = await ctx.workNodeGateway.enqueueResume(
       { id: thread.id, revision: settledThread!.revision },
-      'codex',
+      'fixture-continuable',
       { nextStep: 'Continue on the same native session' },
     )
     expect(resume).toMatchObject({
       kind: 'resume', state: 'queued',
-      payload: { resumeSessionId: 'remote-codex-session-1', environmentKey: 'main' },
+      payload: { resumeSessionId: 'remote-session-1', environmentKey: 'main' },
     })
+    await ctx.fiber.dispose()
+  })
+
+  it('reconciles a matching already-running attempt when ack is retried after the central crash window', async () => {
+    const ctx = await harness()
+    const connected = await connectNode(ctx)
+    const { thread } = await createBoundThread(ctx, connected.nodeId)
+    const queued = await ctx.workNodeGateway.enqueueExecute(
+      { id: thread.id, revision: thread.revision }, 'codex', 'one-shot',
+    )
+
+    const poll = await signedPost(ctx, '/work-node/v1/poll', pollBody(connected.nodeRevision))
+    expect(poll.status).toBe(200)
+
+    // Simulate the exact crash window: beginAttempt committed after the remote Runner
+    // was published, but the gateway command still says queued when the Host restarts.
+    const running = await ctx.workExecution.beginAttempt(
+      { id: thread.id, revision: thread.revision },
+      { provider: 'codex', mode: 'one-shot' },
+    )
+    expect(running.state).toBe('running')
+    expect(ctx.workNodeGateway.getCommand(queued.id)?.state).toBe('queued')
+
+    const retryAck = await signedPost(ctx, '/work-node/v1/ack', {
+      nodeKey: 'pc2', commandId: queued.id, accepted: true,
+    })
+    expect(retryAck.status).toBe(200)
+    expect(ctx.workNodeGateway.getCommand(queued.id)).toMatchObject({
+      state: 'accepted', acceptedThreadRevision: running.revision,
+    })
+    expect(ctx.workExecution.get(thread.id)?.activeAttempt?.seq).toBe(1)
     await ctx.fiber.dispose()
   })
 

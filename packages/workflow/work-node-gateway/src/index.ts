@@ -12,7 +12,7 @@ import { credentialRef, type CredentialRef } from '@deepseek-ai/dsh-credentials'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { KvTable } from '@deepseek-ai/dsh-storage-domain'
 import type { ExecutionThread, ExecutionThreadId, ExecutionThreadRef, RunnerMode } from '@deepseek-ai/dsh-work-execution'
-import type { WorkEnvironment, WorkEnvironmentRef, WorkEnvironmentSnapshot } from '@deepseek-ai/dsh-work-environment'
+import type { WorkEnvironmentRef, WorkEnvironmentSnapshot } from '@deepseek-ai/dsh-work-environment'
 import { WorkNodeConflictError, type WorkNode, type WorkNodeId } from '@deepseek-ai/dsh-work-node'
 import { buildBoundedWorkPrompt, type WorkHandoff } from '@deepseek-ai/dsh-work-runner-subagent'
 import { workNodeGatewayDomainSpec } from './spec.ts'
@@ -450,15 +450,19 @@ export class WorkNodeGateway extends Service {
         throw new HttpGatewayError(409, 'SESSION_MISMATCH', 'native resume must preserve the requested session id')
       }
 
-      const node = this.ctx.workNodes.get(current.nodeId)
-      const failureCode = node === undefined ? 'NODE_MISSING' : this.deliveryFailure(current, node)
-      if (failureCode !== undefined) {
-        await this.rejectQueuedCommand(current, failureCode)
-        throw new HttpGatewayError(409, 'COMMAND_INVALIDATED', 'command became invalid before runner publication was recorded')
-      }
-
+      // Recovery edge: a Host crash may happen after beginAttempt() commits but before
+      // the gateway command is persisted as accepted. Reconcile that already-published
+      // matching Runner before ordinary queued-command validation, which correctly sees
+      // a running thread as stale for a *new* delivery.
       let running = this.reconcilePublishedAttempt(current, request.subagentSessionId)
       if (running === undefined) {
+        const node = this.ctx.workNodes.get(current.nodeId)
+        const failureCode = node === undefined ? 'NODE_MISSING' : this.deliveryFailure(current, node)
+        if (failureCode !== undefined) {
+          await this.rejectQueuedCommand(current, failureCode)
+          throw new HttpGatewayError(409, 'COMMAND_INVALIDATED', 'command became invalid before runner publication was recorded')
+        }
+
         try {
           running = await this.ctx.workExecution.beginAttempt(
             { id: current.payload.threadId, revision: current.payload.threadRevision },

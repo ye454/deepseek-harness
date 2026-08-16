@@ -4,8 +4,8 @@
  */
 
 import { realpath, stat } from 'node:fs/promises'
-import { platform, arch } from 'node:process'
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-subprocess'
 import type { WorkEnvironmentSnapshot } from '@deepseek-ai/dsh-work-environment'
 import type { WorkNodeDaemonEnvironmentConfig, WorkNodeDaemonEnvironmentReport } from './types.ts'
 
@@ -51,6 +51,9 @@ export class WorkNodeEnvironmentCollector {
   /**
    * Collect one report. Git failures degrade the report but do not stop daemon heartbeat; the workspace
    * path and runtime identity remain observable so the central scheduler can refuse it deliberately.
+   * @param config - One configured local environment.
+   * @param signal - Optional daemon shutdown signal.
+   * @returns current environment report.
    */
   async collect(config: WorkNodeDaemonEnvironmentConfig, signal?: AbortSignal): Promise<WorkNodeDaemonEnvironmentReport> {
     const workspacePath = await realpath(config.workspacePath)
@@ -59,14 +62,14 @@ export class WorkNodeEnvironmentCollector {
       const snapshot: WorkEnvironmentSnapshot = {
         workspace: {
           path: workspacePath,
-          repository: git.repository,
-          branch: git.branch,
+          ...(git.repository === undefined ? {} : { repository: git.repository }),
+          ...(git.branch === undefined ? {} : { branch: git.branch }),
           commit: git.commit,
           dirty: git.dirty,
         },
         runtime: {
-          os: platform,
-          arch,
+          os: process.platform,
+          arch: process.arch,
           versions: { node: process.version },
         },
         services: [],
@@ -78,7 +81,7 @@ export class WorkNodeEnvironmentCollector {
     } catch (error) {
       const snapshot: WorkEnvironmentSnapshot = {
         workspace: { path: workspacePath },
-        runtime: { os: platform, arch, versions: { node: process.version } },
+        runtime: { os: process.platform, arch: process.arch, versions: { node: process.version } },
         services: [],
         devices: normalize(config.devices ?? []),
         capabilities: normalize(config.capabilities ?? []),

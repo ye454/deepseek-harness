@@ -7,15 +7,15 @@ import type {
 // Type-only: pulls the generated ctx.remote.workConsole namespace into this compilation face.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 
-/** Immutable React-facing state. */
+/** Immutable React-facing state. Optional remote values are explicit to keep snapshot shape stable. */
 export interface WorkConsoleUiState {
   readonly open: boolean
   readonly loading: boolean
   readonly detailLoading: boolean
-  readonly error?: string
-  readonly snapshot?: WorkConsoleSnapshot
-  readonly selectedTaskId?: string
-  readonly detail?: WorkConsoleTaskDetail
+  readonly error: string | undefined
+  readonly snapshot: WorkConsoleSnapshot | undefined
+  readonly selectedTaskId: string | undefined
+  readonly detail: WorkConsoleTaskDetail | undefined
 }
 
 type Listener = () => void
@@ -26,6 +26,10 @@ export class WorkConsoleUiStore {
     open: false,
     loading: false,
     detailLoading: false,
+    error: undefined,
+    snapshot: undefined,
+    selectedTaskId: undefined,
+    detail: undefined,
   }
   private readonly listeners = new Set<Listener>()
   private snapshotEpoch = 0
@@ -86,16 +90,13 @@ export class WorkConsoleUiStore {
         loading: false,
         error: undefined,
         snapshot,
-        ...(selected === undefined ? { selectedTaskId: undefined, detail: undefined } : { selectedTaskId: selected }),
+        selectedTaskId: selected,
+        detail: selected === this.state.selectedTaskId ? this.state.detail : undefined,
       })
       if (selected !== undefined) await this.loadTask(selected)
     } catch (error) {
       if (epoch !== this.snapshotEpoch) return
-      this.replace({
-        ...this.state,
-        loading: false,
-        error: renderError(error),
-      })
+      this.replace({ ...this.state, loading: false, error: renderError(error) })
     }
   }
 
@@ -109,8 +110,7 @@ export class WorkConsoleUiStore {
   /** Clear stale transport errors without changing authoritative data. */
   clearError(): void {
     if (this.state.error === undefined) return
-    const { error: _error, ...next } = this.state
-    this.replace(next)
+    this.replace({ ...this.state, error: undefined })
   }
 
   private async loadTask(taskId: string): Promise<void> {
@@ -127,11 +127,7 @@ export class WorkConsoleUiStore {
         })
         return
       }
-      this.replace({
-        ...this.state,
-        detailLoading: false,
-        detail: result.value,
-      })
+      this.replace({ ...this.state, detailLoading: false, detail: result.value })
     } catch (error) {
       if (epoch !== this.detailEpoch || this.state.selectedTaskId !== taskId) return
       this.replace({ ...this.state, detailLoading: false, error: renderError(error) })

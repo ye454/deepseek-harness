@@ -90,8 +90,11 @@ export const remoteEnvironmentIdentityRecord = z.object({
   updatedAt: z.string(),
 })
 
+/** Durable command record inferred from {@link remoteNodeCommandRecord}. */
 export type RemoteNodeCommandRecord = z.infer<typeof remoteNodeCommandRecord>
+/** Durable deployment node identity record inferred from {@link remoteNodeIdentityRecord}. */
 export type RemoteNodeIdentityRecord = z.infer<typeof remoteNodeIdentityRecord>
+/** Durable node-local environment identity record inferred from {@link remoteEnvironmentIdentityRecord}. */
 export type RemoteEnvironmentIdentityRecord = z.infer<typeof remoteEnvironmentIdentityRecord>
 
 /** Durable identity and command queue for the HTTP pull gateway. */

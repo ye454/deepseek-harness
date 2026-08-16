@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import type {
   WorkConsoleBoardStatus,
   WorkConsoleSnapshot,
   WorkConsoleTaskCard,
   WorkConsoleTaskDetail,
 } from '@deepseek-ai/dsh-api-remotes/client'
-import type { SidebarFooterActionOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
-import type { WorkConsoleUiStore } from './store.ts'
+import type { WorkConsoleRootProps, WorkConsoleTriggerProps } from './contract.ts'
 import css from './WorkConsoleRoot.module.css'
 
 const POLL_MS = 5_000
@@ -19,25 +19,18 @@ const COLUMNS: ReadonlyArray<{ status: WorkConsoleBoardStatus; label: string }> 
   { status: 'done', label: '完成' },
 ]
 
-interface WorkConsoleRootProps {
-  readonly store: WorkConsoleUiStore
-}
-
-interface WorkConsoleTriggerProps extends SidebarFooterActionOwnerProps {
-  readonly store: WorkConsoleUiStore
-}
-
 /** Sidebar entry opening the global, project-independent Work Console. */
-export function WorkConsoleTrigger({ wide, store }: WorkConsoleTriggerProps) {
-  const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot)
+export function WorkConsoleTrigger({ wide, useStore, openConsole, closeConsole }: WorkConsoleTriggerProps) {
+  const open = useStore(state => state.open)
+  const selectedTaskId = useStore(state => state.selectedTaskId)
   return (
     <button
       type="button"
       className={wide ? css.trigger : `${css.trigger} ${css.triggerRail}`}
       aria-label="全局工作台"
-      aria-pressed={state.open}
+      aria-pressed={open}
       title={wide ? undefined : '全局工作台'}
-      onClick={() => { store.toggle() }}
+      onClick={() => { if (open) closeConsole(); else openConsole(selectedTaskId) }}
     >
       <span className={css.triggerIcon} aria-hidden="true">▦</span>
       {wide && <span className={css.triggerLabel}>全局工作台</span>}
@@ -46,34 +39,45 @@ export function WorkConsoleTrigger({ wide, store }: WorkConsoleTriggerProps) {
 }
 
 /** Frame-wide read-only global task board. */
-export function WorkConsoleRoot({ store }: WorkConsoleRootProps) {
-  const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot)
+export function WorkConsoleRoot({
+  useStore,
+  useWorkConsole,
+  closeConsole,
+  refreshConsole,
+  selectTask,
+  clearError,
+}: WorkConsoleRootProps) {
+  const open = useStore(state => state.open)
+  const selectedTaskId = useStore(state => state.selectedTaskId)
+  const remote = useWorkConsole(state => state)
   const [query, setQuery] = useState('')
   const [priority, setPriority] = useState<'all' | 'p0' | 'p1' | 'p2'>('all')
   const [runner, setRunner] = useState('all')
   const [node, setNode] = useState('all')
 
   useEffect(() => {
-    if (!state.open) return undefined
-    const timer = window.setInterval(() => { void store.refresh() }, POLL_MS)
+    if (!open) return undefined
+    const timer = window.setInterval(() => { refreshConsole(selectedTaskId) }, POLL_MS)
     return () => { window.clearInterval(timer) }
-  }, [state.open, store])
+  }, [open, refreshConsole, selectedTaskId])
 
   useEffect(() => {
-    if (!state.open) return undefined
+    if (!open) return undefined
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') store.close()
+      if (event.key === 'Escape') closeConsole()
     }
     window.addEventListener('keydown', onKey)
     return () => { window.removeEventListener('keydown', onKey) }
-  }, [state.open, store])
+  }, [closeConsole, open])
 
-  const snapshot = state.snapshot
+  const snapshot = remote.snapshot
   const filtered = useMemo(() => filterTasks(snapshot, { query, priority, runner, node }), [snapshot, query, priority, runner, node])
-  const runners = useMemo(() => unique(filteredOrAll(snapshot).map(task => task.execution.provider)), [snapshot])
-  const nodes = useMemo(() => unique(filteredOrAll(snapshot).map(task => task.placement?.nodeName ?? task.placement?.nodeId)), [snapshot])
+  const runners = useMemo(() => unique(allTasks(snapshot).map(task => task.execution.provider)), [snapshot])
+  const nodes = useMemo(() => unique(allTasks(snapshot).map(task => task.placement?.nodeName ?? task.placement?.nodeId)), [snapshot])
 
-  if (!state.open) return null
+  if (!open) return null
+
+  const detail = remote.detailTaskId === selectedTaskId ? remote.detail : undefined
 
   return (
     <div className={css.overlay} role="dialog" aria-modal="true" aria-label="持续工作控制台">
@@ -88,17 +92,17 @@ export function WorkConsoleRoot({ store }: WorkConsoleRootProps) {
             <p className={css.subtitle}>跨任务、Runner、节点与环境的全局执行事实视图</p>
           </div>
           <div className={css.headerActions}>
-            <button type="button" className={css.secondaryButton} disabled={state.loading} onClick={() => { void store.refresh() }}>
-              {state.loading ? '刷新中…' : '刷新'}
+            <button type="button" className={css.secondaryButton} disabled={remote.loading} onClick={() => { refreshConsole(selectedTaskId) }}>
+              {remote.loading ? '刷新中…' : '刷新'}
             </button>
-            <button type="button" className={css.closeButton} aria-label="关闭工作台" onClick={() => { store.close() }}>×</button>
+            <button type="button" className={css.closeButton} aria-label="关闭工作台" onClick={closeConsole}>×</button>
           </div>
         </header>
 
-        {state.error !== undefined && (
+        {remote.error !== undefined && (
           <div className={css.errorBanner}>
-            <span>{state.error}</span>
-            <button type="button" onClick={() => { store.clearError() }}>关闭</button>
+            <span>{remote.error}</span>
+            <button type="button" onClick={clearError}>关闭</button>
           </div>
         )}
 
@@ -131,12 +135,16 @@ export function WorkConsoleRoot({ store }: WorkConsoleRootProps) {
                 status={column.status}
                 label={column.label}
                 tasks={filtered.filter(task => task.status === column.status)}
-                selectedTaskId={state.selectedTaskId}
-                onSelect={taskId => { store.selectTask(taskId) }}
+                selectedTaskId={selectedTaskId ?? undefined}
+                onSelect={selectTask}
               />
             ))}
           </section>
-          <TaskDetailPanel detail={state.detail} loading={state.detailLoading} selectedTaskId={state.selectedTaskId} />
+          <TaskDetailPanel
+            detail={detail}
+            loading={remote.detailLoading && remote.detailTaskId === selectedTaskId}
+            selectedTaskId={selectedTaskId ?? undefined}
+          />
         </main>
       </div>
     </div>
@@ -258,7 +266,8 @@ function TaskCard({ task, selected, onSelect }: {
 
 function PriorityBadge({ priority }: { readonly priority: 'p0' | 'p1' | 'p2' }) {
   const label = priority === 'p0' ? 'P0 紧急' : priority === 'p1' ? 'P1 高' : 'P2 普通'
-  return <span className={`${css.priorityBadge} ${css[priority]}`}>{label}</span>
+  const priorityClass = priority === 'p0' ? css.p0 : priority === 'p1' ? css.p1 : css.p2
+  return <span className={`${css.priorityBadge} ${priorityClass}`}>{label}</span>
 }
 
 function Fact({ label, value, warning = false }: { readonly label: string; readonly value: string; readonly warning?: boolean }) {
@@ -300,15 +309,18 @@ function TaskDetailPanel({ detail, loading, selectedTaskId }: {
       <DetailSection title={`Execution Threads · ${detail.threads.length}`}>
         {detail.threads.length === 0 && <div className={css.muted}>暂无 ExecutionThread</div>}
         <div className={css.threadList}>
-          {detail.threads.map(thread => (
-            <div key={thread.id} className={css.threadRow}>
-              <div><strong>{thread.state}</strong><span className={css.mono}>{shortId(thread.id)}</span></div>
-              <div className={css.threadMeta}>
-                {(thread.activeAttempt ?? thread.lastAttempt) !== undefined && <span>{(thread.activeAttempt ?? thread.lastAttempt)?.provider} · {(thread.activeAttempt ?? thread.lastAttempt)?.mode}</span>}
-                {thread.blocker !== undefined && <span className={css.validationFailed}>{thread.blocker}</span>}
+          {detail.threads.map(thread => {
+            const attempt = thread.activeAttempt ?? thread.lastAttempt
+            return (
+              <div key={thread.id} className={css.threadRow}>
+                <div><strong>{thread.state}</strong><span className={css.mono}>{shortId(thread.id)}</span></div>
+                <div className={css.threadMeta}>
+                  {attempt !== undefined && <span>{attempt.provider} · {attempt.mode}</span>}
+                  {thread.blocker !== undefined && <span className={css.validationFailed}>{thread.blocker}</span>}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </DetailSection>
 
@@ -353,7 +365,7 @@ function TaskDetailPanel({ detail, loading, selectedTaskId }: {
   )
 }
 
-function DetailSection({ title, children }: { readonly title: string; readonly children: React.ReactNode }) {
+function DetailSection({ title, children }: { readonly title: string; readonly children: ReactNode }) {
   return <section className={css.detailSection}><h3>{title}</h3>{children}</section>
 }
 
@@ -381,7 +393,7 @@ function filterTasks(snapshot: WorkConsoleSnapshot | undefined, filters: {
   })
 }
 
-function filteredOrAll(snapshot: WorkConsoleSnapshot | undefined): readonly WorkConsoleTaskCard[] {
+function allTasks(snapshot: WorkConsoleSnapshot | undefined): readonly WorkConsoleTaskCard[] {
   return snapshot?.tasks ?? []
 }
 

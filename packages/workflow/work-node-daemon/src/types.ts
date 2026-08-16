@@ -78,6 +78,8 @@ export interface WorkNodeDaemonJournalRecord {
   readonly state: WorkNodeDaemonJournalState
   readonly sessionId?: SessionId
   readonly stopReason?: ExecutionStopReason
+  /** Set only after the central gateway confirms the terminal result. */
+  readonly reportedAt?: string
   readonly createdAt: string
   readonly updatedAt: string
 }

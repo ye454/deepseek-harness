@@ -25,6 +25,7 @@ const executePayload = z.object({
   environmentId,
   environmentRevision: z.number().int().positive(),
   runnerProvider: z.string(),
+  mode: z.enum(['one-shot', 'continuable']),
   prompt: z.string(),
   promptBytes: z.number().int().nonnegative(),
   resumeSessionId: z.string().transform(SessionId).optional(),

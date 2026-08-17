@@ -6,8 +6,8 @@ import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-run
 
 /** Root-scoped viewing state shared by the sidebar trigger and overlay. */
 export interface WorkConsoleViewState {
-  readonly open: boolean
-  readonly selectedTaskId: string | null
+  open: boolean
+  selectedTaskId: string | null
 }
 
 type WorkConsoleViewActions = {

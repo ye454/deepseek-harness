@@ -9,7 +9,6 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { WorkItemId, type TaskWorkItem } from '@deepseek-ai/dsh-work-control'
 import type { ExecutionThread } from '@deepseek-ai/dsh-work-execution'
 import type { WorkEnvironment } from '@deepseek-ai/dsh-work-environment'
-import type { WorkNode } from '@deepseek-ai/dsh-work-node'
 import type { WorkValidatorResult } from '@deepseek-ai/dsh-work-validation'
 // Typert-generated ./typert and ./remote artifacts import Zod at runtime.
 import type {} from 'zod'

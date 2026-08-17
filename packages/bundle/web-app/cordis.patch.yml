@@ -61,6 +61,26 @@
       config:
         backend: json
 
+    # Global continuous-work facts. These services are config-free and stay on
+    # the Host plane so every browser session sees the same durable task state.
+    - id: work-control
+      name: '@deepseek-ai/dsh-work-control'
+
+    - id: work-execution
+      name: '@deepseek-ai/dsh-work-execution'
+
+    - id: work-node
+      name: '@deepseek-ai/dsh-work-node'
+
+    - id: work-environment
+      name: '@deepseek-ai/dsh-work-environment'
+
+    - id: work-validation
+      name: '@deepseek-ai/dsh-work-validation'
+
+    - id: work-console
+      name: '@deepseek-ai/dsh-work-console'
+
     - id: message-feedback
       name: '@deepseek-ai/dsh-message-feedback'
       config:
@@ -182,6 +202,9 @@
 
     - id: ui-sidebar
       name: '@deepseek-ai/dsh-client-ui-sidebar'
+
+    - id: ui-work-console
+      name: '@deepseek-ai/dsh-client-ui-work-console'
 
     - id: ui-settings
       name: '@deepseek-ai/dsh-client-ui-settings'

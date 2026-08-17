@@ -3,9 +3,9 @@ import { Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
-import WorkControlService, { WorkItemId, type TaskPriority, type ValidatorSpec } from '@deepseek-ai/dsh-work-control'
+import WorkControlService, { type TaskPriority, type ValidatorSpec } from '@deepseek-ai/dsh-work-control'
 import WorkExecutionService from '@deepseek-ai/dsh-work-execution'
-import WorkEnvironmentRegistry from '@deepseek-ai/dsh-work-environment'
+import WorkEnvironmentRegistry, { type WorkEnvironmentSnapshot } from '@deepseek-ai/dsh-work-environment'
 import WorkNodeRegistry from '@deepseek-ai/dsh-work-node'
 import WorkValidationService from '@deepseek-ai/dsh-work-validation'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
@@ -54,7 +54,7 @@ async function organize(
   })
 }
 
-function runtimeSnapshot(full = false) {
+function runtimeSnapshot(full = false): WorkEnvironmentSnapshot {
   return {
     workspace: full
       ? { path: '/work/full', repository: 'https://example.invalid/repo.git', branch: 'main', commit: 'abc', dirty: false }
@@ -200,7 +200,7 @@ describe('WorkConsoleGateway host branch matrix', () => {
       { kind: 'user-acceptance', requirement: 'advisory', label: 'Advisory human' },
       { kind: 'smoke-test', requirement: 'optional', label: 'Optional smoke' },
     ]
-    let task = await organize(ctx, 'Human validation', 'p1', validators)
+    const task = await organize(ctx, 'Human validation', 'p1', validators)
     const worker = await node(ctx, 'Worker', ['codex'])
     const environment = await ctx.workEnvironments.registerEnvironment({
       nodeId: worker.id,
@@ -220,11 +220,12 @@ describe('WorkConsoleGateway host branch matrix', () => {
       validatorIndex: 0,
       outcome: 'passed',
       actor: 'local-user',
-      evidence: [{ kind: 'note', label: 'human decision', reference: 'acceptance:1' }],
+      evidence: [{ kind: 'artifact', label: 'human decision', reference: 'acceptance:1' }],
     })
-    task = ctx.workControl.get(task.id) as typeof task
-    expect(task.validation?.state).toBe('passed')
-    expect(task.validation?.checkedAt).toBeTypeOf('string')
+    const current = ctx.workControl.get(task.id)
+    if (current?.kind !== 'task') throw new Error('expected organized task')
+    expect(current.validation?.state).toBe('passed')
+    expect(current.validation?.checkedAt).toBeTypeOf('string')
 
     const detail = ctx.workConsole.task(String(task.id))
     expect(detail?.environments[0]).toEqual({

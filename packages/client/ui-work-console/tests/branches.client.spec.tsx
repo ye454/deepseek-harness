@@ -121,14 +121,14 @@ describe('WorkConsoleRoot branch matrix', () => {
     render(<WorkConsoleRoot {...props(state, selected.id, detail)} />)
     expect(screen.getByText('1 降级')).toBeTruthy()
     expect(screen.getByText('1 不可用')).toBeTruthy()
-    expect(screen.getByText('runner-5')).toBeTruthy()
-    expect(screen.getByText('node-fallback')).toBeTruthy()
-    expect(screen.getByText('env-fallback')).toBeTruthy()
+    expect(screen.getAllByText('runner-5').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getAllByText('node-fallback').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getAllByText('env-fallback').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('验收 1/1')).toBeTruthy()
     expect(screen.getByText('失败检查')).toBeTruthy()
     expect(screen.getByText('log://without-summary')).toBeTruthy()
     expect(screen.getByText('short')).toBeTruthy()
-    expect(screen.getByText('完成')).toBeTruthy()
+    expect(screen.getAllByText('完成').length).toBeGreaterThanOrEqual(2)
   })
 
   it('shows healthy resource labels and empty/fallback Task Detail facts', () => {
@@ -173,7 +173,7 @@ describe('WorkConsoleRoot branch matrix', () => {
     expect(screen.getByText('暂无 ExecutionThread')).toBeTruthy()
     expect(screen.getByText('当前 Task 没有独立验收项')).toBeTruthy()
     expect(screen.getByText('Environment · 0')).toBeTruthy()
-    expect(screen.getByText('待认领')).toBeTruthy()
+    expect(screen.getAllByText('待认领').length).toBeGreaterThanOrEqual(2)
     expect(screen.queryByText('ENV STALE')).toBeNull()
   })
 

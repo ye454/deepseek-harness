@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkConsoleSnapshot, WorkConsoleTaskCard, WorkConsoleTaskDetail } from '@deepseek-ai/dsh-api-remotes/client'
 import type { WorkConsoleRootProps } from '../src/client/contract.ts'
+import type { WorkConsoleControllerState } from '../src/client/controller.ts'
 import { WorkConsoleRoot } from '../src/client/WorkConsoleRoot.tsx'
 
 afterEach(cleanup)
@@ -16,19 +17,19 @@ function props(
   detail?: WorkConsoleTaskDetail,
   overrides: Partial<WorkConsoleRootProps> = {},
 ): WorkConsoleRootProps {
+  const remoteState: WorkConsoleControllerState = {
+    loading: false,
+    detailLoading: false,
+    snapshot,
+    ...(selectedTaskId === null ? {} : { detailTaskId: selectedTaskId }),
+    ...(detail === undefined ? {} : { detail }),
+  }
   return {
     useSessions: unusedGlobalHook,
     useWorkspaces: unusedGlobalHook,
     useStore: select => select({ open: true, selectedTaskId }),
     actions,
-    useWorkConsole: select => select({
-      loading: false,
-      detailLoading: false,
-      error: undefined,
-      snapshot,
-      detailTaskId: selectedTaskId ?? undefined,
-      detail,
-    }),
+    useWorkConsole: select => select(remoteState),
     openConsole: vi.fn(),
     closeConsole: vi.fn(),
     refreshConsole: vi.fn(),

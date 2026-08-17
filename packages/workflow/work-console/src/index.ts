@@ -197,6 +197,7 @@ function boardStatus(status: TaskWorkItem['status']): WorkConsoleBoardStatus {
     case 'blocked': return 'blocked'
     case 'validation': return 'validation'
     case 'done': return 'done'
+    /* v8 ignore next -- snapshot() and task() exclude cancelled Tasks before card projection. */
     case 'cancelled': throw new Error('work-console cannot project a cancelled Task onto the active board')
   }
 }
@@ -245,6 +246,7 @@ function placementField(ctx: Context, thread: ExecutionThread): { placement?: Wo
 }
 
 function attemptView(attempt: ExecutionThread['activeAttempt'] | ExecutionThread['lastAttempt']): WorkConsoleAttemptView {
+  /* v8 ignore next -- threadView/executionView call this only after checking the attempt exists. */
   if (attempt === undefined) throw new Error('work-console attempt projection received no attempt')
   return {
     provider: attempt.provider,

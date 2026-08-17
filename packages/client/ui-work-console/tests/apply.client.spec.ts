@@ -74,6 +74,11 @@ async function bench() {
   return { ctx, fiber, parent, snapshotRemote, taskRemote }
 }
 
+function injectedFace(ctx: Context, actions: { open: () => void; close: () => void; selectTask: (taskId: string | null) => void }): WorkConsoleInjected {
+  const entry = ctx.slots.entries('shell.overlay')[0]!
+  return (entry.inject as (bound: never) => WorkConsoleInjected)(actions as never)
+}
+
 describe('ui-work-console client apply', () => {
   it('declares the exact services needed by the browser plugin', () => {
     expect(inject).toEqual(['slots', 'remote', 'remote.workConsole'])
@@ -89,16 +94,15 @@ describe('ui-work-console client apply', () => {
     expect(overlays[0]!.options).toMatchObject({ id: 'global-work-console', order: 10 })
 
     const actions = { open: vi.fn(), close: vi.fn(), selectTask: vi.fn() }
-    const sidebarFace = (sidebar[0]!.inject as (actions: never) => WorkConsoleInjected)(actions as never)
-    const overlayFace = (overlays[0]!.inject as (actions: never) => WorkConsoleInjected)(actions as never)
+    const sidebarFace = (sidebar[0]!.inject as (bound: never) => WorkConsoleInjected)(actions as never)
+    const overlayFace = (overlays[0]!.inject as (bound: never) => WorkConsoleInjected)(actions as never)
     expect(sidebarFace.hooks.workConsole).toBe(overlayFace.hooks.workConsole)
   })
 
   it('wires open, refresh, selection, clear-error and close through the injected face', async () => {
     const { ctx, snapshotRemote, taskRemote } = await bench()
-    const entry = ctx.slots.entries('shell.overlay')[0]!
     const actions = { open: vi.fn(), close: vi.fn(), selectTask: vi.fn() }
-    const face = (entry.inject as (actions: never) => WorkConsoleInjected)(actions as never)
+    const face = injectedFace(ctx, actions)
 
     face.openConsole(null)
     await vi.waitFor(() => {
@@ -115,6 +119,30 @@ describe('ui-work-console client apply', () => {
     face.clearError()
     face.closeConsole()
     expect(actions.close).toHaveBeenCalledOnce()
+  })
+
+  it('stops synchronization after a failed snapshot refresh', async () => {
+    const { ctx, snapshotRemote, taskRemote } = await bench()
+    snapshotRemote.mockResolvedValueOnce({ ok: false, error: { code: 'OFFLINE', message: 'down' } })
+    const actions = { open: vi.fn(), close: vi.fn(), selectTask: vi.fn() }
+    const face = injectedFace(ctx, actions)
+
+    face.refreshConsole(null)
+    await vi.waitFor(() => { expect(snapshotRemote).toHaveBeenCalledOnce() })
+    expect(actions.selectTask).not.toHaveBeenCalled()
+    expect(taskRemote).not.toHaveBeenCalled()
+  })
+
+  it('keeps null selection and skips Detail when the global board is empty', async () => {
+    const { ctx, snapshotRemote, taskRemote } = await bench()
+    snapshotRemote.mockResolvedValueOnce({ ok: true, value: { ...snapshot, tasks: [] } })
+    const actions = { open: vi.fn(), close: vi.fn(), selectTask: vi.fn() }
+    const face = injectedFace(ctx, actions)
+
+    face.refreshConsole(null)
+    await vi.waitFor(() => { expect(snapshotRemote).toHaveBeenCalledOnce() })
+    expect(actions.selectTask).not.toHaveBeenCalled()
+    expect(taskRemote).not.toHaveBeenCalled()
   })
 
   it('removes both contributions when the plugin fiber is disposed', async () => {

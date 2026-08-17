@@ -11,12 +11,20 @@ import css from './WorkConsoleRoot.module.css'
 
 const POLL_MS = 5_000
 
+const STATUS_LABELS: Record<WorkConsoleBoardStatus, string> = {
+  unclaimed: '待认领',
+  running: '进行中',
+  blocked: '阻塞',
+  validation: '待确认',
+  done: '完成',
+}
+
 const COLUMNS: ReadonlyArray<{ status: WorkConsoleBoardStatus; label: string }> = [
-  { status: 'unclaimed', label: '待认领' },
-  { status: 'running', label: '进行中' },
-  { status: 'blocked', label: '阻塞' },
-  { status: 'validation', label: '待确认' },
-  { status: 'done', label: '完成' },
+  { status: 'unclaimed', label: STATUS_LABELS.unclaimed },
+  { status: 'running', label: STATUS_LABELS.running },
+  { status: 'blocked', label: STATUS_LABELS.blocked },
+  { status: 'validation', label: STATUS_LABELS.validation },
+  { status: 'done', label: STATUS_LABELS.done },
 ]
 
 /** Sidebar entry opening the global, project-independent Work Console. */
@@ -404,11 +412,11 @@ function allTasks(snapshot: WorkConsoleSnapshot | undefined): readonly WorkConso
 }
 
 function unique(values: readonly (string | undefined)[]): string[] {
-  return [...new Set(values.filter((value): value is string => value !== undefined && value !== ''))].sort()
+  return [...new Set(values.filter((value): value is string => value !== undefined))].sort()
 }
 
 function statusLabel(status: WorkConsoleBoardStatus): string {
-  return COLUMNS.find(column => column.status === status)?.label ?? status
+  return STATUS_LABELS[status]
 }
 
 function shortId(value: string): string {

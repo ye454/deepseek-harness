@@ -3,6 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
 import type { WorkConsoleSnapshot, WorkConsoleTaskDetail } from '@deepseek-ai/dsh-api-remotes/client'
+import type { PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import { apply, inject } from '../src/client/index.ts'
@@ -36,6 +37,17 @@ const detail: WorkConsoleTaskDetail = {
   validators: [],
 }
 
+type TestParentProps =
+  & PropsRuntime<'root'>
+  & PropsRenderSlots<'sidebar.footer.action' | 'shell.overlay'>
+
+function TestParent(props: TestParentProps) {
+  // The test parent declares these slots only to exercise contribution wiring;
+  // consuming the render seat keeps the same declaration contract as production.
+  void props.renderSlot
+  return null
+}
+
 async function bench() {
   const ctx = new Context()
   await ctx.plugin(SlotRegistry).await()
@@ -53,7 +65,7 @@ async function bench() {
           'sidebar.footer.action': { kind: 'list', scope: 'root' },
           'shell.overlay': { kind: 'list', scope: 'root' },
         },
-      }, () => null)
+      }, TestParent)
     },
   })
   await parent.await()

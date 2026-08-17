@@ -156,11 +156,17 @@ function ResourceStrip({ snapshot }: { readonly snapshot: WorkConsoleSnapshot | 
     return <div className={css.resourceStrip}><div className={css.resourceSkeleton}>正在读取全局资源事实…</div></div>
   }
   const { resources, pending } = snapshot
+  const nodeSecondary = resources.nodes.offline > 0
+    ? `${resources.nodes.offline} 离线`
+    : resources.nodes.degraded > 0 ? `${resources.nodes.degraded} 降级` : '全部在线'
+  const environmentSecondary = resources.environments.unavailable > 0
+    ? `${resources.environments.unavailable} 不可用`
+    : resources.environments.degraded > 0 ? `${resources.environments.degraded} 降级` : '全部 Ready'
   return (
     <div className={css.resourceStrip}>
-      <ResourceChip label="Nodes" primary={`${resources.nodes.online}/${resources.nodes.total}`} secondary={resources.nodes.offline > 0 ? `${resources.nodes.offline} 离线` : '全部可见'} warning={resources.nodes.offline > 0} />
-      <ResourceChip label="Environments" primary={`${resources.environments.ready}/${resources.environments.total}`} secondary={resources.environments.degraded > 0 ? `${resources.environments.degraded} 降级` : 'Ready'} warning={resources.environments.degraded > 0 || resources.environments.unavailable > 0} />
-      {resources.runners.slice(0, 4).map(item => (
+      <ResourceChip label="Nodes" primary={`${resources.nodes.online}/${resources.nodes.total}`} secondary={nodeSecondary} warning={resources.nodes.offline > 0 || resources.nodes.degraded > 0} />
+      <ResourceChip label="Environments" primary={`${resources.environments.ready}/${resources.environments.total}`} secondary={environmentSecondary} warning={resources.environments.degraded > 0 || resources.environments.unavailable > 0} />
+      {resources.runners.map(item => (
         <ResourceChip key={item.provider} label={item.provider} primary={`${item.onlineNodeCount}/${item.nodeCount}`} secondary="可用节点" warning={item.onlineNodeCount === 0} />
       ))}
       <div className={css.pendingBox}>

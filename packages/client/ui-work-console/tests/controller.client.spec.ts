@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { WorkConsoleSnapshot, WorkConsoleTaskDetail } from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { WorkConsoleController, chooseWorkConsoleTask } from '../src/client/controller.ts'
 
-function snapshot(title: string, priority: 'p0' | 'p1' | 'p2' = 'p1'): WorkConsoleSnapshot {
+function snapshot(title: string, priority: 'p0' | 'p1' | 'p2' = 'p1', status: 'unclaimed' | 'running' | 'blocked' | 'validation' | 'done' = 'running'): WorkConsoleSnapshot {
   return {
     generatedAt: '2026-08-16T00:00:00.000Z',
     tasks: [{
@@ -14,7 +14,7 @@ function snapshot(title: string, priority: 'p0' | 'p1' | 'p2' = 'p1'): WorkConso
       summary: '',
       tags: [],
       priority,
-      status: 'running',
+      status,
       execution: { threadCount: 0, runningThreadCount: 0, blockedThreadCount: 0 },
       updatedAt: '2026-08-16T00:00:00.000Z',
     }],
@@ -38,8 +38,9 @@ function detail(id: string): WorkConsoleTaskDetail {
 
 function deferred<T>() {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>(value => { resolve = value })
-  return { promise, resolve }
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((onResolve, onReject) => { resolve = onResolve; reject = onReject })
+  return { promise, resolve, reject }
 }
 
 function harness(remote: {
@@ -75,7 +76,7 @@ describe('WorkConsoleController', () => {
     expect(controller.getSnapshot().snapshot?.tasks[0]?.title).toBe('new')
   })
 
-  it('keeps the last good snapshot visible when a later transport read fails', async () => {
+  it('keeps the last good snapshot visible when a later Remote result fails', async () => {
     let fail = false
     const { controller } = harness({
       snapshot: () => Promise.resolve(fail
@@ -90,6 +91,51 @@ describe('WorkConsoleController', () => {
     expect(controller.getSnapshot().snapshot?.tasks[0]?.title).toBe('stable')
     expect(controller.getSnapshot().error).toContain('OFFLINE')
     controller.clearError()
+    expect(controller.getSnapshot().error).toBeUndefined()
+    controller.clearError()
+    expect(controller.getSnapshot().error).toBeUndefined()
+  })
+
+  it('publishes transport exceptions, preserves the prior snapshot, and notifies only live subscribers', async () => {
+    let throwNow = false
+    const { controller } = harness({
+      snapshot: () => throwNow
+        ? Promise.reject(new Error('socket down'))
+        : Promise.resolve({ ok: true, value: snapshot('prior') }),
+      task: () => Promise.resolve({ ok: true, value: undefined }),
+    })
+    const listener = vi.fn()
+    const unsubscribe = controller.subscribe(listener)
+    await controller.refresh()
+    const afterSuccess = listener.mock.calls.length
+    expect(afterSuccess).toBeGreaterThan(0)
+
+    throwNow = true
+    await controller.refresh()
+    expect(controller.getSnapshot().snapshot?.tasks[0]?.title).toBe('prior')
+    expect(controller.getSnapshot().error).toBe('socket down')
+    expect(listener.mock.calls.length).toBeGreaterThan(afterSuccess)
+
+    unsubscribe()
+    const afterUnsubscribe = listener.mock.calls.length
+    controller.clearError()
+    expect(listener).toHaveBeenCalledTimes(afterUnsubscribe)
+  })
+
+  it('ignores a stale refresh rejection after a newer refresh wins', async () => {
+    const first = deferred<unknown>()
+    let call = 0
+    const { controller } = harness({
+      snapshot: () => ++call === 1
+        ? first.promise
+        : Promise.resolve({ ok: true, value: snapshot('winner') }),
+      task: () => Promise.resolve({ ok: true, value: undefined }),
+    })
+    const oldRequest = controller.refresh()
+    await controller.refresh()
+    first.reject('old failure')
+    await oldRequest
+    expect(controller.getSnapshot().snapshot?.tasks[0]?.title).toBe('winner')
     expect(controller.getSnapshot().error).toBeUndefined()
   })
 
@@ -110,6 +156,43 @@ describe('WorkConsoleController', () => {
     await oldRequest
     expect(controller.getSnapshot()).toMatchObject({ detailTaskId: 'new', detail: { card: { id: 'new' } } })
   })
+
+  it('surfaces Task Remote failures and non-Error exceptions without fabricating detail', async () => {
+    let mode: 'result' | 'throw' = 'result'
+    const { controller } = harness({
+      snapshot: () => Promise.resolve({ ok: true, value: snapshot('board') }),
+      task: () => mode === 'result'
+        ? Promise.resolve({ ok: false, error: { code: 'NOT_FOUND', message: 'gone' } })
+        : Promise.reject('wire broke'),
+    })
+
+    await controller.loadTask('missing')
+    expect(controller.getSnapshot().error).toContain('NOT_FOUND')
+    expect(controller.getSnapshot().detail).toBeUndefined()
+    mode = 'throw'
+    await controller.loadTask('broken')
+    expect(controller.getSnapshot().error).toBe('wire broke')
+    expect(controller.getSnapshot().detail).toBeUndefined()
+  })
+
+  it('ignores a stale Task rejection after a newer Task Detail wins', async () => {
+    const first = deferred<unknown>()
+    const { controller } = harness({
+      snapshot: () => Promise.resolve({ ok: true, value: snapshot('board') }),
+      task: taskId => taskId === 'old'
+        ? first.promise
+        : Promise.resolve({ ok: true, value: detail(taskId) }),
+    })
+    const oldRequest = controller.loadTask('old')
+    await controller.loadTask('new')
+    first.reject(new Error('old task failed'))
+    await oldRequest
+    expect(controller.getSnapshot()).toMatchObject({
+      detailTaskId: 'new',
+      detail: { card: { id: 'new' } },
+      error: undefined,
+    })
+  })
 })
 
 describe('chooseWorkConsoleTask', () => {
@@ -120,5 +203,17 @@ describe('chooseWorkConsoleTask', () => {
     }
     expect(chooseWorkConsoleTask(mixed, 'p1')).toBe('p1')
     expect(chooseWorkConsoleTask(mixed, 'missing')).toBe('p0')
+    expect(chooseWorkConsoleTask(mixed, null)).toBe('p0')
+  })
+
+  it('falls back from P0 to running, then first Task, then null', () => {
+    const running = snapshot('running', 'p2', 'running')
+    expect(chooseWorkConsoleTask(running, null)).toBe('running')
+
+    const firstOnly = snapshot('first', 'p2', 'blocked')
+    expect(chooseWorkConsoleTask(firstOnly, null)).toBe('first')
+
+    const empty: WorkConsoleSnapshot = { ...firstOnly, tasks: [] }
+    expect(chooseWorkConsoleTask(empty, null)).toBeNull()
   })
 })

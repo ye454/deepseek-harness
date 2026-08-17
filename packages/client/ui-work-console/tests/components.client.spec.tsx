@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type {
   WorkConsoleSnapshot,
   WorkConsoleTaskDetail,
@@ -305,7 +305,7 @@ describe('WorkConsoleRoot', () => {
     const refreshConsole = vi.fn()
     const closeConsole = vi.fn()
     const view = render(<WorkConsoleRoot {...rootProps({ refreshConsole, closeConsole })} />)
-    vi.advanceTimersByTime(5_000)
+    act(() => { vi.advanceTimersByTime(5_000) })
     expect(refreshConsole).toHaveBeenCalledWith('task-p0')
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(closeConsole).toHaveBeenCalledOnce()
@@ -318,7 +318,7 @@ describe('WorkConsoleRoot', () => {
     })} />)
     expect(screen.queryByRole('dialog')).toBeNull()
     rerender(<WorkConsoleRoot {...rootProps({
-      useStore: select => select({ open: true, selectedTaskId: undefined as never }),
+      useStore: select => select({ open: true, selectedTaskId: null }),
       useWorkConsole: select => select({
         loading: true,
         detailLoading: false,

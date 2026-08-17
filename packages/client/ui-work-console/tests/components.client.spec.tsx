@@ -9,6 +9,7 @@ import type {
   WorkConsoleRootProps,
   WorkConsoleTriggerProps,
 } from '../src/client/contract.ts'
+import type { WorkConsoleControllerState } from '../src/client/controller.ts'
 import { WorkConsoleRoot, WorkConsoleTrigger } from '../src/client/WorkConsoleRoot.tsx'
 
 afterEach(() => {
@@ -177,10 +178,9 @@ const actions = {
 
 function rootProps(overrides: Partial<WorkConsoleRootProps> = {}): WorkConsoleRootProps {
   const viewState = { open: true, selectedTaskId: 'task-p0' }
-  const remoteState = {
+  const remoteState: WorkConsoleControllerState = {
     loading: false,
     detailLoading: false,
-    error: undefined,
     snapshot,
     detailTaskId: 'task-p0',
     detail,
@@ -318,16 +318,10 @@ describe('WorkConsoleRoot', () => {
       useStore: select => select({ open: false, selectedTaskId: null }),
     })} />)
     expect(screen.queryByRole('dialog')).toBeNull()
+    const loadingState: WorkConsoleControllerState = { loading: true, detailLoading: false }
     rerender(<WorkConsoleRoot {...rootProps({
       useStore: select => select({ open: true, selectedTaskId: null }),
-      useWorkConsole: select => select({
-        loading: true,
-        detailLoading: false,
-        error: undefined,
-        snapshot: undefined,
-        detailTaskId: undefined,
-        detail: undefined,
-      }),
+      useWorkConsole: select => select(loadingState),
     })} />)
     expect(screen.getByText('正在读取全局资源事实…')).toBeTruthy()
     expect(screen.getByText('选择一个 Task 查看执行与验收事实')).toBeTruthy()

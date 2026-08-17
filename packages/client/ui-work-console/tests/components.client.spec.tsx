@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import type {
   WorkConsoleSnapshot,
   WorkConsoleTaskDetail,
@@ -108,7 +108,7 @@ const detail: WorkConsoleTaskDetail = {
         mode: 'one-shot',
         startedAt: '2026-08-17T01:01:00.000Z',
       },
-      placement: snapshot.tasks[0]!.placement,
+      placement: snapshot.tasks[0]!.placement!,
       updatedAt: '2026-08-17T01:02:00.000Z',
     },
     {
@@ -239,8 +239,8 @@ describe('WorkConsoleRoot', () => {
     expect(screen.getByRole('dialog', { name: '持续工作控制台' })).toBeTruthy()
     expect(screen.getByText('Nodes')).toBeTruthy()
     expect(screen.getByText('Pending Center')).toBeTruthy()
-    expect(screen.getByText('修复 G1 雷达漂移')).toBeTruthy()
-    expect(screen.getByText('P0 紧急')).toBeTruthy()
+    expect(screen.getAllByText('修复 G1 雷达漂移').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getAllByText('P0 紧急').length).toBeGreaterThanOrEqual(2)
     expect(screen.getAllByText('ENV STALE').length).toBeGreaterThan(0)
     expect(screen.getByText('Validation · Gen 2')).toBeTruthy()
     expect(screen.getByText('log://run/42')).toBeTruthy()
@@ -250,24 +250,25 @@ describe('WorkConsoleRoot', () => {
 
   it('filters by search, priority, Runner and Node without changing Host facts', () => {
     render(<WorkConsoleRoot {...rootProps()} />)
+    const board = within(screen.getByRole('region', { name: '全局任务看板' }))
     const search = screen.getByPlaceholderText('搜索任务 / Stage / Runner / Node')
     fireEvent.change(search, { target: { value: 'RAG' } })
-    expect(screen.getByText('RAG 缓存优化')).toBeTruthy()
-    expect(screen.queryByText('修复 G1 雷达漂移')).toBeNull()
+    expect(board.getByText('RAG 缓存优化')).toBeTruthy()
+    expect(board.queryByText('修复 G1 雷达漂移')).toBeNull()
 
     fireEvent.change(search, { target: { value: '' } })
     const selects = screen.getAllByRole('combobox')
     fireEvent.change(selects[0]!, { target: { value: 'p1' } })
-    expect(screen.getByText('RAG 缓存优化')).toBeTruthy()
-    expect(screen.queryByText('后台 UI 修复')).toBeNull()
+    expect(board.getByText('RAG 缓存优化')).toBeTruthy()
+    expect(board.queryByText('后台 UI 修复')).toBeNull()
     fireEvent.change(selects[0]!, { target: { value: 'all' } })
     fireEvent.change(selects[1]!, { target: { value: 'codex' } })
-    expect(screen.getByText('修复 G1 雷达漂移')).toBeTruthy()
-    expect(screen.queryByText('RAG 缓存优化')).toBeNull()
+    expect(board.getByText('修复 G1 雷达漂移')).toBeTruthy()
+    expect(board.queryByText('RAG 缓存优化')).toBeNull()
     fireEvent.change(selects[1]!, { target: { value: 'all' } })
     fireEvent.change(selects[2]!, { target: { value: 'PC2' } })
-    expect(screen.getByText('修复 G1 雷达漂移')).toBeTruthy()
-    expect(screen.queryByText('后台 UI 修复')).toBeNull()
+    expect(board.getByText('修复 G1 雷达漂移')).toBeTruthy()
+    expect(board.queryByText('后台 UI 修复')).toBeNull()
   })
 
   it('requests Task Detail from a clicked card, refreshes manually, clears errors, and closes', () => {

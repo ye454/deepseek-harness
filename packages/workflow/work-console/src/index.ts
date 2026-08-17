@@ -197,7 +197,7 @@ function boardStatus(status: TaskWorkItem['status']): WorkConsoleBoardStatus {
     case 'blocked': return 'blocked'
     case 'validation': return 'validation'
     case 'done': return 'done'
-    case 'cancelled': return 'done'
+    case 'cancelled': throw new Error('work-console cannot project a cancelled Task onto the active board')
   }
 }
 

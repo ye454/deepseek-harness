@@ -4,8 +4,22 @@
  * @module @deepseek-ai/dsh-work-console/types
  */
 
-/** Stable global-board column independent from task-specific workflow stages. */
+/** Stable global-board status independent from task-specific workflow stages. */
 export type WorkConsoleBoardStatus = 'unclaimed' | 'running' | 'blocked' | 'validation' | 'done'
+
+/** Human-facing acceptance readiness after the automated validation subset is considered. */
+export type WorkConsoleAcceptanceState = 'automated-pending' | 'automated-failed' | 'human-ready' | 'passed'
+
+/** Passive idea card. It has no Runner, Environment, or execution state. */
+export interface WorkConsoleIdeaCard {
+  readonly id: string
+  readonly revision: number
+  readonly title: string
+  readonly summary: string
+  readonly tags: readonly string[]
+  readonly createdAt: string
+  readonly updatedAt: string
+}
 
 /** Compact current workflow-stage projection. */
 export interface WorkConsoleStageView {
@@ -14,12 +28,16 @@ export interface WorkConsoleStageView {
   readonly kind: string
 }
 
-/** Compact validation projection already suitable for the global board. */
+/** Compact validation projection suitable for execution/acceptance routing. */
 export interface WorkConsoleValidationView {
   readonly state: 'pending' | 'passed' | 'failed'
   readonly requiredPassed: number
   readonly requiredTotal: number
   readonly checkedAt?: string
+  /** Whether automated gates are still running/failed, a human can now decide, or the task fully passed. */
+  readonly acceptanceState?: WorkConsoleAcceptanceState
+  /** Required user-acceptance entries that are not currently passed and are ready for human action. */
+  readonly pendingUserAcceptance?: number
 }
 
 /** Current/most-relevant execution facts for a task card. */
@@ -47,7 +65,7 @@ export interface WorkConsolePlacementView {
   readonly stale: boolean
 }
 
-/** One task card shown on the global status board. */
+/** One task card shown on the global work surface. */
 export interface WorkConsoleTaskCard {
   readonly id: string
   readonly revision: number
@@ -94,16 +112,19 @@ export interface WorkConsoleResourceSummary {
   readonly runners: readonly WorkConsoleRunnerSummary[]
 }
 
-/** Attention counts used by the Pending Center. */
+/** Attention counts used by the lightweight top strip. */
 export interface WorkConsolePendingSummary {
   readonly blockedTasks: number
   readonly validationTasks: number
+  /** Only acceptance gates that are actually ready for a human decision. */
   readonly pendingUserAcceptance: number
 }
 
 /** Read-only main-dashboard snapshot. */
 export interface WorkConsoleSnapshot {
   readonly generatedAt: string
+  /** Optional during the V1 wire transition; the Host always emits it. */
+  readonly ideas?: readonly WorkConsoleIdeaCard[]
   readonly tasks: readonly WorkConsoleTaskCard[]
   readonly resources: WorkConsoleResourceSummary
   readonly pending: WorkConsolePendingSummary

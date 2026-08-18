@@ -42,6 +42,19 @@ async function validationTask(ctx: Context, title: string) {
   })
 }
 
+async function humanOnlyTask(ctx: Context, title: string) {
+  const idea = await ctx.workControl.createIdea({ title })
+  const promoted = await ctx.workControl.promoteIdea({ id: idea.id, revision: idea.revision })
+  return await ctx.workControl.organizeTask({ id: promoted.id, revision: promoted.revision }, {
+    taskType: 'custom',
+    workflow: { version: 1, stages: [{ id: 'review', title: 'Review', kind: 'validation' }] },
+    validationPolicy: {
+      version: 1,
+      validators: [{ kind: 'user-acceptance', requirement: 'required', label: 'Human approval' }],
+    },
+  })
+}
+
 function card(ctx: Context, taskId: string) {
   const result = ctx.workConsole.snapshot().tasks.find(task => task.id === taskId)
   if (result === undefined) throw new Error(`missing projected task ${taskId}`)
@@ -49,6 +62,18 @@ function card(ctx: Context, taskId: string) {
 }
 
 describe('WorkConsole automated -> human acceptance routing', () => {
+  it('does not expose a human-only gate while the Task is still running', async () => {
+    const ctx = await harness()
+    const task = await humanOnlyTask(ctx, 'Still executing')
+
+    expect(card(ctx, String(task.id)).validation).toMatchObject({
+      acceptanceState: 'automated-pending',
+      pendingUserAcceptance: 0,
+    })
+    expect(ctx.workConsole.snapshot().pending.pendingUserAcceptance).toBe(0)
+    await ctx.fiber.dispose()
+  })
+
   it('keeps human acceptance hidden while required automated validation has not passed', async () => {
     const ctx = await harness()
     let task = await validationTask(ctx, 'Automation pending')

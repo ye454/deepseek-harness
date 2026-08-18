@@ -35,9 +35,9 @@ export interface WorkConsoleValidationView {
   readonly requiredTotal: number
   readonly checkedAt?: string
   /** Whether automated gates are still running/failed, a human can now decide, or the task fully passed. */
-  readonly acceptanceState?: WorkConsoleAcceptanceState
-  /** Required user-acceptance entries that are not currently passed and are ready for human action. */
-  readonly pendingUserAcceptance?: number
+  readonly acceptanceState: WorkConsoleAcceptanceState
+  /** Required user-acceptance entries that are currently actionable. */
+  readonly pendingUserAcceptance: number
 }
 
 /** Current/most-relevant execution facts for a task card. */
@@ -123,8 +123,7 @@ export interface WorkConsolePendingSummary {
 /** Read-only main-dashboard snapshot. */
 export interface WorkConsoleSnapshot {
   readonly generatedAt: string
-  /** Optional during the V1 wire transition; the Host always emits it. */
-  readonly ideas?: readonly WorkConsoleIdeaCard[]
+  readonly ideas: readonly WorkConsoleIdeaCard[]
   readonly tasks: readonly WorkConsoleTaskCard[]
   readonly resources: WorkConsoleResourceSummary
   readonly pending: WorkConsolePendingSummary

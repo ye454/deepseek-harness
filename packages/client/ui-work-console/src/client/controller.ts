@@ -1,13 +1,18 @@
 /**
- * React-free Work Console object layer: Remote reads enter, immutable snapshots exit.
+ * React-free Work Console object layer: Remote reads/commands enter, immutable snapshots exit.
  * The slot renderer binds this bare observable through the inject `hooks` compartment.
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type {
+  DecideWorkConsoleAcceptanceRequest,
+  PromoteWorkConsoleIdeaRequest,
+  PromotedWorkConsoleTask,
+  WorkConsoleAcceptanceDecisionValue,
+  WorkConsoleCommandFailure,
   WorkConsoleSnapshot,
   WorkConsoleTaskDetail,
 } from '@deepseek-ai/dsh-api-remotes/client'
-// Type-only: pulls ctx.remote.workConsole into this program.
+// Type-only: pulls generated ctx.remote Work Console namespaces into this program.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 
 /** Immutable business snapshot consumed through the framework-generated `useWorkConsole` hook. */
@@ -22,7 +27,7 @@ export interface WorkConsoleRemoteState {
 
 type Listener = () => void
 
-/** Remote read controller. It is a bare observable source, not a UI store and imports no React. */
+/** Remote object layer. It is a bare observable source, not a UI store and imports no React. */
 export class WorkConsoleController {
   private state: WorkConsoleRemoteState = {
     loading: false,
@@ -36,7 +41,7 @@ export class WorkConsoleController {
   private snapshotEpoch = 0
   private detailEpoch = 0
 
-  /** @param ctx - client apply-world context carrying the generated Work Console Remote. */
+  /** @param ctx - client apply-world context carrying generated Work Console Remotes. */
   constructor(private readonly ctx: Context) {}
 
   /** Stable observable snapshot getter. */
@@ -96,7 +101,51 @@ export class WorkConsoleController {
     }
   }
 
-  /** Remove only the transient transport error; authoritative snapshots stay intact. */
+  /** Explicitly promote one passive Idea. No automatic organization/model work is started. */
+  async promoteIdea(request: PromoteWorkConsoleIdeaRequest): Promise<PromotedWorkConsoleTask | undefined> {
+    this.publish({ ...this.state, error: undefined })
+    try {
+      const transport = await this.ctx.remote.workConsoleCommands.promoteIdea(request)
+      if (!transport.ok) {
+        this.publish({ ...this.state, error: `workConsoleCommands.promoteIdea: ${transport.error.code}: ${transport.error.message}` })
+        return undefined
+      }
+      if (!transport.value.ok) {
+        this.publish({ ...this.state, error: renderCommandFailure(transport.value.error) })
+        return undefined
+      }
+      await this.refresh()
+      return transport.value.value
+    } catch (error) {
+      this.publish({ ...this.state, error: renderError(error) })
+      return undefined
+    }
+  }
+
+  /** Record one explicit human acceptance decision through the Host-owned command boundary. */
+  async decideAcceptance(
+    request: DecideWorkConsoleAcceptanceRequest,
+  ): Promise<WorkConsoleAcceptanceDecisionValue | undefined> {
+    this.publish({ ...this.state, error: undefined })
+    try {
+      const transport = await this.ctx.remote.workConsoleCommands.decideAcceptance(request)
+      if (!transport.ok) {
+        this.publish({ ...this.state, error: `workConsoleCommands.decideAcceptance: ${transport.error.code}: ${transport.error.message}` })
+        return undefined
+      }
+      if (!transport.value.ok) {
+        this.publish({ ...this.state, error: renderCommandFailure(transport.value.error) })
+        return undefined
+      }
+      await this.refresh()
+      return transport.value.value
+    } catch (error) {
+      this.publish({ ...this.state, error: renderError(error) })
+      return undefined
+    }
+  }
+
+  /** Remove only the transient transport/business error; authoritative snapshots stay intact. */
   clearError(): void {
     if (this.state.error === undefined) return
     this.publish({ ...this.state, error: undefined })
@@ -105,6 +154,19 @@ export class WorkConsoleController {
   private publish(next: WorkConsoleRemoteState): void {
     this.state = next
     for (const listener of this.listeners) listener()
+  }
+}
+
+function renderCommandFailure(error: WorkConsoleCommandFailure): string {
+  switch (error.code) {
+    case 'not-found': return `目标已不存在：${error.id}`
+    case 'conflict': return `内容已更新，请刷新后重试（当前 revision ${error.currentRevision}）`
+    case 'invalid-state': return `当前状态不可执行此操作：${error.reason}`
+    case 'stale-generation': return '验收轮次已变化，请重新查看验收证据'
+    case 'invalid-validator': return '该验收项已变化，请重新打开 Task Detail'
+    case 'not-ready': return error.reason === 'automated-failed'
+      ? '自动验收未通过，不能进入人工通过流程'
+      : '自动验收尚未完成，暂不能人工通过'
   }
 }
 

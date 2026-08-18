@@ -108,15 +108,6 @@ export class WorkConsoleController {
   }
 }
 
-/** Prefer the existing selection, then P0, then an active task, then the first card. */
-export function chooseWorkConsoleTask(snapshot: WorkConsoleSnapshot, current: string | null): string | null {
-  if (current !== null && snapshot.tasks.some(task => task.id === current)) return current
-  return snapshot.tasks.find(task => task.priority === 'p0')?.id
-    ?? snapshot.tasks.find(task => task.status === 'running')?.id
-    ?? snapshot.tasks[0]?.id
-    ?? null
-}
-
 function renderError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }

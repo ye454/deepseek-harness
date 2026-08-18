@@ -52,6 +52,9 @@
     },
     {
       "path": "../../workflow/work-console"
+    },
+    {
+      "path": "../../workflow/work-console-commands"
     }
   ]
 }

@@ -8,7 +8,7 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 // Type-only: declares the target slot contracts used by this contribution.
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
-import { WorkConsoleController, chooseWorkConsoleTask } from './controller.ts'
+import { WorkConsoleController } from './controller.ts'
 import type { WorkConsoleInjected, WorkConsoleStoreProps } from './contract.ts'
 import { WorkConsoleRoot, WorkConsoleTrigger } from './WorkConsoleRoot.tsx'
 import { createWorkConsoleStore } from './store.ts'
@@ -37,10 +37,12 @@ export function apply(ctx: ClientContext): void {
     actions: WorkConsoleStoreProps['actions'],
   ): Promise<void> => {
     const snapshot = await controller.refresh()
-    if (snapshot === undefined) return
-    const selected = chooseWorkConsoleTask(snapshot, selectedTaskId)
-    if (selected !== selectedTaskId) actions.selectTask(selected)
-    if (selected !== null) await controller.loadTask(selected)
+    if (snapshot === undefined || selectedTaskId === null) return
+    if (!snapshot.tasks.some(task => task.id === selectedTaskId)) {
+      actions.selectTask(null)
+      return
+    }
+    await controller.loadTask(selectedTaskId)
   }
 
   const injected = (actions: WorkConsoleStoreProps['actions']): WorkConsoleInjected => ({

@@ -6,17 +6,19 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
-import { WorkItemId, type TaskWorkItem } from '@deepseek-ai/dsh-work-control'
+import { WorkItemId, type IdeaWorkItem, type TaskWorkItem } from '@deepseek-ai/dsh-work-control'
 import type { ExecutionThread } from '@deepseek-ai/dsh-work-execution'
 import type { WorkEnvironment } from '@deepseek-ai/dsh-work-environment'
 import type { WorkValidatorResult } from '@deepseek-ai/dsh-work-validation'
 // Typert-generated ./typert and ./remote artifacts import Zod at runtime.
 import type {} from 'zod'
 import type {
+  WorkConsoleAcceptanceState,
   WorkConsoleAttemptView,
   WorkConsoleBoardStatus,
   WorkConsoleEnvironmentDetail,
   WorkConsoleExecutionView,
+  WorkConsoleIdeaCard,
   WorkConsolePendingSummary,
   WorkConsolePlacementView,
   WorkConsoleResourceSummary,
@@ -25,6 +27,7 @@ import type {
   WorkConsoleTaskCard,
   WorkConsoleTaskDetail,
   WorkConsoleThreadView,
+  WorkConsoleValidationView,
   WorkConsoleValidatorDetail,
 } from './types.ts'
 
@@ -39,34 +42,35 @@ export class WorkConsoleGateway extends TypertRemoteService {
   }
 
   /**
-   * Build the lightweight global-board snapshot from current durable facts.
-   * Cancelled Tasks are deliberately excluded from the active board.
-   * @returns tasks, compact resource inventory, and Pending Center counts.
+   * Build the lightweight global snapshot from current durable facts.
+   * Ideas remain passive; cancelled Tasks are deliberately excluded from the active product surface.
    */
   @Remote('snapshot')
   snapshot(): WorkConsoleSnapshot {
+    const ideas = this.ctx.workControl.listIdeas().map(ideaCard)
     const tasks = this.ctx.workControl.listTasks()
       .filter(task => task.status !== 'cancelled')
       .map(task => this.card(task))
       .sort(compareCards)
     return {
       generatedAt: new Date().toISOString(),
+      ideas,
       tasks,
       resources: this.resourceSummary(),
-      pending: this.pendingSummary(tasks),
+      pending: pendingSummary(tasks),
     }
   }
 
   /**
-   * Build one on-demand detail projection without loading execution logs or large Evidence payloads.
-   * @param rawTaskId - Stable WorkItem id from a board card.
-   * @returns current Task detail or undefined when the id is absent/not a Task/cancelled.
+   * Build one on-demand Task detail without loading execution logs or large Evidence payloads.
+   * @param rawTaskId - Stable WorkItem id from a task card.
    */
   @Remote('task')
   task(rawTaskId: string): WorkConsoleTaskDetail | undefined {
     const taskId = WorkItemId(rawTaskId)
     const item = this.ctx.workControl.get(taskId)
     if (item?.kind !== 'task' || item.status === 'cancelled') return undefined
+
     const threads = this.ctx.workExecution.list(taskId)
     const environmentMap = new Map<string, WorkEnvironment>()
     const threadViews = threads.map(thread => {
@@ -78,9 +82,8 @@ export class WorkConsoleGateway extends TypertRemoteService {
       return this.threadView(thread)
     })
     const session = this.ctx.workValidation.getSession(taskId)
-    const results = session === undefined
-      ? []
-      : this.ctx.workValidation.listResults(taskId, session.generation)
+    const results = session === undefined ? [] : this.ctx.workValidation.listResults(taskId, session.generation)
+
     return {
       card: this.card(item),
       threads: threadViews,
@@ -95,6 +98,7 @@ export class WorkConsoleGateway extends TypertRemoteService {
     const activeThreads = threads.filter(thread => thread.state !== 'closed' && thread.state !== 'cancelled')
     const relevant = chooseRelevantThread(activeThreads)
     const stage = task.workflow?.stages.find(candidate => candidate.id === task.currentStageId)
+    const validation = validationProjection(this.ctx, task)
     return {
       id: String(task.id),
       revision: task.revision,
@@ -104,19 +108,10 @@ export class WorkConsoleGateway extends TypertRemoteService {
       priority: task.priority,
       status: boardStatus(task.status),
       ...(task.taskType === undefined ? {} : { taskType: task.taskType }),
-      ...(stage === undefined ? {} : {
-        stage: { id: stage.id, title: stage.title, kind: stage.kind },
-      }),
+      ...(stage === undefined ? {} : { stage: { id: stage.id, title: stage.title, kind: stage.kind } }),
       execution: executionView(activeThreads, relevant),
       ...(relevant === undefined ? {} : placementField(this.ctx, relevant)),
-      ...(task.validation === undefined ? {} : {
-        validation: {
-          state: task.validation.state,
-          requiredPassed: task.validation.requiredPassed,
-          requiredTotal: task.validation.requiredTotal,
-          ...(task.validation.checkedAt === undefined ? {} : { checkedAt: task.validation.checkedAt }),
-        },
-      }),
+      ...(validation === undefined ? {} : { validation }),
       updatedAt: task.updatedAt,
     }
   }
@@ -165,27 +160,17 @@ export class WorkConsoleGateway extends TypertRemoteService {
       runners: runnerRows,
     }
   }
+}
 
-  private pendingSummary(cards: readonly WorkConsoleTaskCard[]): WorkConsolePendingSummary {
-    let pendingUserAcceptance = 0
-    for (const card of cards) {
-      if (card.status !== 'validation') continue
-      const taskId = WorkItemId(card.id)
-      const task = this.ctx.workControl.get(taskId)
-      if (task?.kind !== 'task') continue
-      const session = this.ctx.workValidation.getSession(taskId)
-      const results = session === undefined ? [] : this.ctx.workValidation.listResults(taskId, session.generation)
-      const byIndex = new Map(results.map(result => [result.validatorIndex, result]))
-      for (const [index, validator] of (task.validationPolicy?.validators ?? []).entries()) {
-        if (validator.kind !== 'user-acceptance' || validator.requirement !== 'required') continue
-        if (byIndex.get(index)?.outcome !== 'passed') pendingUserAcceptance += 1
-      }
-    }
-    return {
-      blockedTasks: cards.filter(card => card.status === 'blocked').length,
-      validationTasks: cards.filter(card => card.status === 'validation').length,
-      pendingUserAcceptance,
-    }
+function ideaCard(idea: IdeaWorkItem): WorkConsoleIdeaCard {
+  return {
+    id: String(idea.id),
+    revision: idea.revision,
+    title: idea.title,
+    summary: idea.summary,
+    tags: [...idea.tags],
+    createdAt: idea.createdAt,
+    updatedAt: idea.updatedAt,
   }
 }
 
@@ -196,7 +181,7 @@ function boardStatus(status: TaskWorkItem['status']): WorkConsoleBoardStatus {
     case 'blocked': return 'blocked'
     case 'validation': return 'validation'
     case 'done': return 'done'
-    /* v8 ignore next -- snapshot() and task() exclude cancelled Tasks before card projection. */
+    /* v8 ignore next -- snapshot()/task() filter cancelled tasks before card projection. */
     case 'cancelled': throw new Error('work-console cannot project a cancelled Task onto the active board')
   }
 }
@@ -244,8 +229,60 @@ function placementField(ctx: Context, thread: ExecutionThread): { placement?: Wo
   }
 }
 
+function validationProjection(ctx: Context, task: TaskWorkItem): WorkConsoleValidationView | undefined {
+  const summary = task.validation
+  if (summary === undefined) return undefined
+  const session = ctx.workValidation.getSession(task.id)
+  const results = session === undefined ? [] : ctx.workValidation.listResults(task.id, session.generation)
+  const byIndex = new Map(results.map(result => [result.validatorIndex, result]))
+  const validators = task.validationPolicy?.validators ?? []
+
+  let automatedRequiredTotal = 0
+  let automatedRequiredPassed = 0
+  let automatedRequiredFailed = false
+  let pendingRequiredUser = 0
+
+  for (const [index, validator] of validators.entries()) {
+    if (validator.requirement !== 'required') continue
+    const result = byIndex.get(index)
+    if (validator.kind === 'user-acceptance') {
+      if (result?.outcome !== 'passed') pendingRequiredUser += 1
+      continue
+    }
+    automatedRequiredTotal += 1
+    if (result?.outcome === 'passed') automatedRequiredPassed += 1
+    else if (result?.outcome === 'failed') automatedRequiredFailed = true
+  }
+
+  let acceptanceState: WorkConsoleAcceptanceState
+  if (summary.state === 'passed') acceptanceState = 'passed'
+  else if (automatedRequiredFailed) acceptanceState = 'automated-failed'
+  else if (automatedRequiredPassed < automatedRequiredTotal) acceptanceState = 'automated-pending'
+  else if (pendingRequiredUser > 0) acceptanceState = 'human-ready'
+  else if (summary.state === 'failed') acceptanceState = 'automated-failed'
+  else acceptanceState = 'automated-pending'
+
+  return {
+    state: summary.state,
+    requiredPassed: summary.requiredPassed,
+    requiredTotal: summary.requiredTotal,
+    ...(summary.checkedAt === undefined ? {} : { checkedAt: summary.checkedAt }),
+    acceptanceState,
+    pendingUserAcceptance: acceptanceState === 'human-ready' ? pendingRequiredUser : 0,
+  }
+}
+
+function pendingSummary(cards: readonly WorkConsoleTaskCard[]): WorkConsolePendingSummary {
+  return {
+    blockedTasks: cards.filter(card => card.status === 'blocked').length,
+    validationTasks: cards.filter(card => card.status === 'validation').length,
+    pendingUserAcceptance: cards.reduce((count, card) =>
+      count + (card.validation?.acceptanceState === 'human-ready' ? card.validation.pendingUserAcceptance ?? 0 : 0), 0),
+  }
+}
+
 function attemptView(attempt: ExecutionThread['activeAttempt'] | ExecutionThread['lastAttempt']): WorkConsoleAttemptView {
-  /* v8 ignore next -- threadView/executionView call this only after checking the attempt exists. */
+  /* v8 ignore next -- callers invoke only after an explicit undefined guard. */
   if (attempt === undefined) throw new Error('work-console attempt projection received no attempt')
   return {
     provider: attempt.provider,

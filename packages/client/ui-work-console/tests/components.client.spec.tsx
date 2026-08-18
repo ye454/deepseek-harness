@@ -1,15 +1,16 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import type {
   WorkConsoleSnapshot,
+  WorkConsoleTaskCard,
   WorkConsoleTaskDetail,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type {
   WorkConsoleRootProps,
   WorkConsoleTriggerProps,
 } from '../src/client/contract.ts'
-import type { WorkConsoleControllerState } from '../src/client/controller.ts'
+import type { WorkConsoleRemoteState } from '../src/client/controller.ts'
 import { WorkConsoleRoot, WorkConsoleTrigger } from '../src/client/WorkConsoleRoot.tsx'
 
 afterEach(() => {
@@ -17,178 +18,185 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-beforeEach(() => { vi.useRealTimers() })
+const unusedGlobalHook = (() => { throw new Error('unused global hook') }) as never
+
+function task(overrides: Partial<WorkConsoleTaskCard> & Pick<WorkConsoleTaskCard, 'id' | 'title' | 'priority' | 'status'>): WorkConsoleTaskCard {
+  return {
+    revision: 1,
+    summary: '',
+    tags: [],
+    execution: { threadCount: 0, runningThreadCount: 0, blockedThreadCount: 0 },
+    updatedAt: '2026-08-18T10:00:00.000Z',
+    ...overrides,
+  }
+}
+
+const running = task({
+  id: 'task-running',
+  title: 'G1 雷达漂移修复',
+  summary: '定位漂移并验证修复。',
+  tags: ['g1', 'navigation'],
+  priority: 'p0',
+  status: 'running',
+  taskType: 'bug-fix',
+  stage: { id: 'fix', title: '方案验证', kind: 'implementation' },
+  execution: { threadCount: 2, runningThreadCount: 1, blockedThreadCount: 0, provider: 'codex', mode: 'one-shot' },
+  placement: {
+    threadId: 'thread-running-1234567890',
+    nodeId: 'node-pc2',
+    nodeName: 'PC2',
+    nodeState: 'online',
+    environmentId: 'env-g1',
+    environmentName: 'G1 Runtime',
+    environmentState: 'ready',
+    boundEnvironmentRevision: 1,
+    currentEnvironmentRevision: 1,
+    stale: false,
+  },
+})
+
+const blocked = task({
+  id: 'task-blocked',
+  title: 'RAG 缓存优化',
+  priority: 'p1',
+  status: 'blocked',
+  execution: { threadCount: 1, runningThreadCount: 0, blockedThreadCount: 1, provider: 'claude-code', mode: 'one-shot' },
+  placement: {
+    threadId: 'thread-blocked',
+    nodeId: 'node-worker',
+    nodeState: 'degraded',
+    environmentId: 'env-worker',
+    environmentState: 'degraded',
+    boundEnvironmentRevision: 1,
+    currentEnvironmentRevision: 2,
+    stale: true,
+  },
+})
+
+const automatedPending = task({
+  id: 'task-auto-pending',
+  title: '接口回归验证',
+  priority: 'p2',
+  status: 'validation',
+  validation: {
+    state: 'pending', requiredPassed: 0, requiredTotal: 2,
+    acceptanceState: 'automated-pending', pendingUserAcceptance: 0,
+  },
+})
+
+const automatedFailed = task({
+  id: 'task-auto-failed',
+  title: '视觉回归失败',
+  priority: 'p1',
+  status: 'validation',
+  validation: {
+    state: 'failed', requiredPassed: 0, requiredTotal: 2,
+    acceptanceState: 'automated-failed', pendingUserAcceptance: 0,
+  },
+})
+
+const humanReady = task({
+  id: 'task-human-ready',
+  title: '后台 UI 修复',
+  summary: 'AI 视觉验收已通过。',
+  priority: 'p1',
+  status: 'validation',
+  stage: { id: 'accept', title: '人工验收', kind: 'validation' },
+  validation: {
+    state: 'pending', requiredPassed: 1, requiredTotal: 2,
+    acceptanceState: 'human-ready', pendingUserAcceptance: 1,
+  },
+})
+
+const done = task({ id: 'task-done', title: '已完成部署', priority: 'p2', status: 'done' })
+const unclaimed = task({ id: 'task-unclaimed', title: '待组织任务', priority: 'p2', status: 'unclaimed' })
 
 const snapshot: WorkConsoleSnapshot = {
-  generatedAt: '2026-08-17T01:00:00.000Z',
+  generatedAt: '2026-08-18T10:00:00.000Z',
+  ideas: [
+    {
+      id: 'idea-1', revision: 1, title: 'RAG 新索引策略', summary: '先沉淀，不执行。', tags: ['rag'],
+      createdAt: '2026-08-18T09:00:00.000Z', updatedAt: '2026-08-18T09:00:00.000Z',
+    },
+    {
+      id: 'idea-2', revision: 1, title: '机器人异常自恢复', summary: '', tags: [],
+      createdAt: '2026-08-18T08:00:00.000Z', updatedAt: '2026-08-18T08:00:00.000Z',
+    },
+  ],
+  tasks: [running, blocked, automatedPending, automatedFailed, humanReady, done, unclaimed],
   resources: {
-    nodes: { total: 2, online: 1, degraded: 0, offline: 1 },
-    environments: { total: 2, ready: 1, degraded: 1, unavailable: 0 },
+    nodes: { total: 3, online: 1, degraded: 1, offline: 1 },
+    environments: { total: 3, ready: 1, degraded: 1, unavailable: 1 },
     runners: [
-      { provider: 'codex', nodeCount: 1, onlineNodeCount: 1 },
+      { provider: 'codex', nodeCount: 2, onlineNodeCount: 1 },
       { provider: 'claude-code', nodeCount: 1, onlineNodeCount: 0 },
     ],
   },
-  pending: { blockedTasks: 1, validationTasks: 1, pendingUserAcceptance: 1 },
-  tasks: [
-    {
-      id: 'task-p0',
-      revision: 4,
-      title: '修复 G1 雷达漂移',
-      summary: '检查定位漂移并验证修复。',
-      tags: ['g1', 'navigation'],
-      priority: 'p0',
-      status: 'running',
-      taskType: 'bug-fix',
-      stage: { id: 'diagnosis', title: '问题诊断', kind: 'diagnosis' },
-      execution: {
-        threadCount: 2,
-        runningThreadCount: 1,
-        blockedThreadCount: 0,
-        provider: 'codex',
-        mode: 'one-shot',
-        attemptStartedAt: '2026-08-17T01:01:00.000Z',
-      },
-      placement: {
-        threadId: 'thread-1234567890',
-        nodeId: 'node-pc2',
-        nodeName: 'PC2',
-        nodeState: 'online',
-        environmentId: 'env-g1',
-        environmentName: 'G1 Runtime',
-        environmentState: 'ready',
-        boundEnvironmentRevision: 1,
-        currentEnvironmentRevision: 2,
-        stale: true,
-      },
-      validation: { state: 'pending', requiredPassed: 0, requiredTotal: 2 },
-      updatedAt: '2026-08-17T01:02:00.000Z',
-    },
-    {
-      id: 'task-blocked',
-      revision: 2,
-      title: 'RAG 缓存优化',
-      summary: '',
-      tags: ['rag'],
-      priority: 'p1',
-      status: 'blocked',
-      execution: {
-        threadCount: 1,
-        runningThreadCount: 0,
-        blockedThreadCount: 1,
-        provider: 'claude-code',
-        mode: 'one-shot',
-        lastStopReason: 'failed',
-      },
-      updatedAt: '2026-08-17T00:50:00.000Z',
-    },
-    {
-      id: 'task-validation',
-      revision: 3,
-      title: '后台 UI 修复',
-      summary: '等待视觉验收',
-      tags: ['ui'],
-      priority: 'p2',
-      status: 'validation',
-      execution: { threadCount: 1, runningThreadCount: 0, blockedThreadCount: 0 },
-      validation: { state: 'failed', requiredPassed: 1, requiredTotal: 2, checkedAt: '2026-08-17T01:03:00.000Z' },
-      updatedAt: '2026-08-17T01:03:00.000Z',
-    },
-  ],
+  pending: { blockedTasks: 1, validationTasks: 3, pendingUserAcceptance: 1 },
 }
 
 const detail: WorkConsoleTaskDetail = {
-  card: snapshot.tasks[0]!,
+  card: running,
   threads: [
     {
-      id: 'thread-1234567890',
+      id: 'thread-running-1234567890',
       revision: 2,
       state: 'running',
-      activeAttempt: {
-        provider: 'codex',
-        mode: 'one-shot',
-        startedAt: '2026-08-17T01:01:00.000Z',
-      },
-      placement: snapshot.tasks[0]!.placement!,
-      updatedAt: '2026-08-17T01:02:00.000Z',
+      activeAttempt: { provider: 'codex', mode: 'one-shot', startedAt: '2026-08-18T09:55:00.000Z' },
+      placement: running.placement,
+      updatedAt: '2026-08-18T10:00:00.000Z',
     },
     {
-      id: 'thread-blocked-1234567890',
+      id: 'short',
       revision: 3,
       state: 'blocked',
-      blocker: '等待设备',
+      blocker: '等待真机',
       lastAttempt: {
-        provider: 'claude-code',
-        mode: 'one-shot',
-        startedAt: '2026-08-17T00:30:00.000Z',
-        finishedAt: '2026-08-17T00:40:00.000Z',
-        stopReason: 'failed',
+        provider: 'claude-code', mode: 'one-shot', startedAt: '2026-08-18T09:30:00.000Z',
+        finishedAt: '2026-08-18T09:40:00.000Z', stopReason: 'failed',
       },
-      updatedAt: '2026-08-17T00:40:00.000Z',
+      updatedAt: '2026-08-18T09:40:00.000Z',
     },
+    { id: 'idle-thread', revision: 1, state: 'idle', updatedAt: '2026-08-18T09:20:00.000Z' },
   ],
-  environments: [
-    {
-      id: 'env-g1',
-      revision: 2,
-      name: 'G1 Runtime',
-      state: 'ready',
-      workspace: {
-        path: '/workspace/g1',
-        repository: 'https://example.invalid/g1.git',
-        branch: 'fix/drift',
-        commit: 'abcdef1234567890',
-        dirty: true,
-      },
-      runtime: { os: 'ubuntu-22.04', arch: 'x64', versions: { python: '3.10' } },
-      devices: ['livox-mid360'],
-      capabilities: ['ros-noetic'],
-    },
-  ],
+  environments: [{
+    id: 'env-g1', revision: 1, name: 'G1 Runtime', state: 'ready',
+    workspace: { path: '/workspace/g1' }, runtime: { os: 'ubuntu-22.04', arch: 'x64', versions: {} },
+    devices: ['livox-mid360'], capabilities: ['ros-noetic'],
+  }],
   validationGeneration: 2,
   validators: [
     {
-      index: 0,
-      kind: 'runtime-check',
-      requirement: 'required',
-      label: '定位运行检查',
-      outcome: 'passed',
-      source: 'automation',
-      checkedAt: '2026-08-17T01:04:00.000Z',
-      evidence: [
-        { kind: 'log', label: '定位日志', reference: 'log://run/42', summary: '漂移未复现' },
-      ],
+      index: 0, kind: 'runtime-check', requirement: 'required', label: '运行检查', outcome: 'passed', source: 'automation',
+      checkedAt: '2026-08-18T10:00:00.000Z', evidence: [{ kind: 'log', label: '日志', reference: 'log://42' }],
     },
     {
-      index: 1,
-      kind: 'user-acceptance',
-      requirement: 'required',
-      label: '用户验收',
-      evidence: [],
+      index: 1, kind: 'user-acceptance', requirement: 'required', label: '人工确认', outcome: 'failed', source: 'user', actor: 'local-user',
+      checkedAt: '2026-08-18T10:01:00.000Z', evidence: [],
     },
+    { index: 2, kind: 'artifact-check', requirement: 'optional', label: '产物检查', evidence: [] },
   ],
 }
 
-const unusedGlobalHook = (() => { throw new Error('unused global hook') }) as never
-const actions = {
-  open: vi.fn(),
-  close: vi.fn(),
-  selectTask: vi.fn(),
-}
-
-function rootProps(overrides: Partial<WorkConsoleRootProps> = {}): WorkConsoleRootProps {
-  const viewState = { open: true, selectedTaskId: 'task-p0' }
-  const remoteState: WorkConsoleControllerState = {
+function rootProps(options: {
+  readonly open?: boolean
+  readonly selectedTaskId?: string | null
+  readonly remote?: Partial<WorkConsoleRemoteState>
+} = {}): WorkConsoleRootProps {
+  const actions = { open: vi.fn(), close: vi.fn(), selectTask: vi.fn() }
+  const remoteState: WorkConsoleRemoteState = {
     loading: false,
     detailLoading: false,
+    error: undefined,
     snapshot,
-    detailTaskId: 'task-p0',
-    detail,
+    detailTaskId: options.selectedTaskId ?? undefined,
+    detail: options.selectedTaskId === running.id ? detail : undefined,
+    ...options.remote,
   }
   return {
     useSessions: unusedGlobalHook,
     useWorkspaces: unusedGlobalHook,
-    useStore: select => select(viewState),
+    useStore: select => select({ open: options.open ?? true, selectedTaskId: options.selectedTaskId ?? null }),
     actions,
     useWorkConsole: select => select(remoteState),
     openConsole: vi.fn(),
@@ -196,134 +204,195 @@ function rootProps(overrides: Partial<WorkConsoleRootProps> = {}): WorkConsoleRo
     refreshConsole: vi.fn(),
     selectTask: vi.fn(),
     clearError: vi.fn(),
-    ...overrides,
   }
 }
 
 describe('WorkConsoleTrigger', () => {
-  it('opens the global surface from the wide sidebar and preserves current selection', () => {
+  it('opens from the wide sidebar and closes from the rail state', () => {
     const openConsole = vi.fn()
-    const props: WorkConsoleTriggerProps = {
-      useSessions: unusedGlobalHook,
-      useWorkspaces: unusedGlobalHook,
+    const wide: WorkConsoleTriggerProps = {
+      ...rootProps({ open: false }),
       wide: true,
-      useStore: select => select({ open: false, selectedTaskId: 'task-p0' }),
-      actions,
-      useWorkConsole: (() => { throw new Error('unused remote hook') }) as never,
       openConsole,
-      closeConsole: vi.fn(),
-      refreshConsole: vi.fn(),
-      selectTask: vi.fn(),
-      clearError: vi.fn(),
     }
-    render(<WorkConsoleTrigger {...props} />)
+    const view = render(<WorkConsoleTrigger {...wide} />)
     fireEvent.click(screen.getByRole('button', { name: '全局工作台' }))
-    expect(openConsole).toHaveBeenCalledWith('task-p0')
+    expect(openConsole).toHaveBeenCalledWith(null)
     expect(screen.getByText('全局工作台')).toBeTruthy()
-  })
 
-  it('closes an already-open rail surface', () => {
     const closeConsole = vi.fn()
-    const props = rootProps({ closeConsole }) as WorkConsoleTriggerProps
-    render(<WorkConsoleTrigger {...props} wide={false} />)
-    const trigger = screen.getByRole('button', { name: '全局工作台' })
-    expect(trigger.getAttribute('aria-pressed')).toBe('true')
-    fireEvent.click(trigger)
+    view.rerender(<WorkConsoleTrigger {...rootProps()} wide={false} closeConsole={closeConsole} />)
+    const rail = screen.getByRole('button', { name: '全局工作台' })
+    expect(rail.getAttribute('title')).toBe('全局工作台')
+    fireEvent.click(rail)
     expect(closeConsole).toHaveBeenCalledOnce()
   })
 })
 
-describe('WorkConsoleRoot', () => {
-  it('renders global resources, P0 facts, stale Environment, threads and current-generation Evidence', () => {
+describe('WorkConsoleRoot product surface', () => {
+  it('separates passive ideas, active execution, human-ready acceptance, and removes done from the homepage', () => {
     render(<WorkConsoleRoot {...rootProps()} />)
     expect(screen.getByRole('dialog', { name: '持续工作控制台' })).toBeTruthy()
-    expect(screen.getByText('Nodes')).toBeTruthy()
-    expect(screen.getByText('Pending Center')).toBeTruthy()
-    expect(screen.getAllByText('修复 G1 雷达漂移').length).toBeGreaterThanOrEqual(2)
-    expect(screen.getAllByText('P0 紧急').length).toBeGreaterThanOrEqual(2)
-    expect(screen.getAllByText('ENV STALE').length).toBeGreaterThan(0)
-    expect(screen.getByText('Validation · Gen 2')).toBeTruthy()
-    expect(screen.getByText('log://run/42')).toBeTruthy()
-    expect(screen.getByText('/workspace/g1')).toBeTruthy()
-    expect(screen.getByText('等待设备')).toBeTruthy()
+
+    const ideas = within(screen.getByRole('region', { name: '想法区' }))
+    expect(ideas.getByText('RAG 新索引策略')).toBeTruthy()
+    expect(ideas.getByText('机器人异常自恢复')).toBeTruthy()
+    expect(ideas.getByText('成熟后由用户明确推进到执行区')).toBeTruthy()
+
+    const execution = within(screen.getByRole('region', { name: '执行区' }))
+    expect(execution.getByText('G1 雷达漂移修复')).toBeTruthy()
+    expect(execution.getByText('RAG 缓存优化')).toBeTruthy()
+    expect(execution.getByText('接口回归验证')).toBeTruthy()
+    expect(execution.getByText('视觉回归失败')).toBeTruthy()
+    expect(execution.getByText('待组织任务')).toBeTruthy()
+    expect(execution.queryByText('后台 UI 修复')).toBeNull()
+    expect(execution.queryByText('已完成部署')).toBeNull()
+    expect(execution.getByText('自动验收')).toBeTruthy()
+    expect(execution.getByText('自动验收失败')).toBeTruthy()
+
+    const acceptance = within(screen.getByRole('region', { name: '验收区' }))
+    expect(acceptance.getByText('后台 UI 修复')).toBeTruthy()
+    expect(acceptance.getByText('待人工验收')).toBeTruthy()
+    expect(acceptance.getByText(/人工门禁 1/)).toBeTruthy()
+    expect(acceptance.queryByText('接口回归验证')).toBeNull()
+
+    expect(screen.getByText('已完成 1 · 进入执行历史查看')).toBeTruthy()
+    expect(screen.queryByLabelText('Task Detail')).toBeNull()
   })
 
-  it('filters by search, priority, Runner and Node without changing Host facts', () => {
+  it('keeps the resource strip compact while reporting unhealthy facts and every Runner', () => {
     render(<WorkConsoleRoot {...rootProps()} />)
-    const board = within(screen.getByRole('region', { name: '全局任务看板' }))
-    const search = screen.getByPlaceholderText('搜索任务 / Stage / Runner / Node')
+    expect(screen.getByText('Nodes')).toBeTruthy()
+    expect(screen.getByText('1 离线')).toBeTruthy()
+    expect(screen.getByText('1 不可用')).toBeTruthy()
+    expect(screen.getByText('codex')).toBeTruthy()
+    expect(screen.getByText('claude-code')).toBeTruthy()
+    expect(screen.getByText('待人工验收')).toBeTruthy()
+  })
+
+  it('covers degraded and healthy resource labels plus the loading strip', () => {
+    const degraded: WorkConsoleSnapshot = {
+      ...snapshot,
+      resources: {
+        nodes: { total: 1, online: 0, degraded: 1, offline: 0 },
+        environments: { total: 1, ready: 0, degraded: 1, unavailable: 0 },
+        runners: [],
+      },
+    }
+    const view = render(<WorkConsoleRoot {...rootProps({ remote: { snapshot: degraded } })} />)
+    expect(screen.getAllByText('1 降级')).toHaveLength(2)
+
+    const healthy: WorkConsoleSnapshot = {
+      ...snapshot,
+      resources: {
+        nodes: { total: 1, online: 1, degraded: 0, offline: 0 },
+        environments: { total: 1, ready: 1, degraded: 0, unavailable: 0 },
+        runners: [],
+      },
+    }
+    view.rerender(<WorkConsoleRoot {...rootProps({ remote: { snapshot: healthy } })} />)
+    expect(screen.getAllByText('正常')).toHaveLength(2)
+
+    view.rerender(<WorkConsoleRoot {...rootProps({ remote: { snapshot: undefined, loading: true } })} />)
+    expect(screen.getByText('正在读取资源事实…')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '刷新中…' })).toBeDisabled()
+  })
+
+  it('filters ideas/tasks by search and tasks by priority without moving acceptance semantics', () => {
+    render(<WorkConsoleRoot {...rootProps()} />)
+    const search = screen.getByPlaceholderText('搜索想法 / Task / Stage / Runner')
     fireEvent.change(search, { target: { value: 'RAG' } })
-    expect(board.getByText('RAG 缓存优化')).toBeTruthy()
-    expect(board.queryByText('修复 G1 雷达漂移')).toBeNull()
+    expect(screen.getByText('RAG 新索引策略')).toBeTruthy()
+    expect(screen.getByText('RAG 缓存优化')).toBeTruthy()
+    expect(screen.queryByText('G1 雷达漂移修复')).toBeNull()
 
     fireEvent.change(search, { target: { value: '' } })
-    const selects = screen.getAllByRole('combobox')
-    fireEvent.change(selects[0]!, { target: { value: 'p1' } })
-    expect(board.getByText('RAG 缓存优化')).toBeTruthy()
-    expect(board.queryByText('后台 UI 修复')).toBeNull()
-    fireEvent.change(selects[0]!, { target: { value: 'all' } })
-    fireEvent.change(selects[1]!, { target: { value: 'codex' } })
-    expect(board.getByText('修复 G1 雷达漂移')).toBeTruthy()
-    expect(board.queryByText('RAG 缓存优化')).toBeNull()
-    fireEvent.change(selects[1]!, { target: { value: 'all' } })
-    fireEvent.change(selects[2]!, { target: { value: 'PC2' } })
-    expect(board.getByText('修复 G1 雷达漂移')).toBeTruthy()
-    expect(board.queryByText('后台 UI 修复')).toBeNull()
+    fireEvent.change(screen.getByRole('combobox', { name: '优先级' }), { target: { value: 'p1' } })
+    const execution = within(screen.getByRole('region', { name: '执行区' }))
+    expect(execution.getByText('RAG 缓存优化')).toBeTruthy()
+    expect(execution.getByText('视觉回归失败')).toBeTruthy()
+    expect(execution.queryByText('G1 雷达漂移修复')).toBeNull()
+    expect(screen.getByRole('region', { name: '验收区' })).toHaveTextContent('后台 UI 修复')
+    expect(screen.getByRole('region', { name: '想法区' })).toHaveTextContent('机器人异常自恢复')
   })
 
-  it('requests Task Detail from a clicked card, refreshes manually, clears errors, and closes', () => {
+  it('opens Task Detail only for a selected Task and closes it through the store action/backdrop', () => {
+    const props = rootProps({ selectedTaskId: running.id })
+    render(<WorkConsoleRoot {...props} />)
+    const drawer = screen.getByLabelText('Task Detail')
+    expect(within(drawer).getByText('G1 雷达漂移修复')).toBeTruthy()
+    expect(within(drawer).getByText('方案验证')).toBeTruthy()
+    expect(within(drawer).getByText('等待真机')).toBeTruthy()
+    expect(within(drawer).getByText('log://42')).toBeTruthy()
+    expect(within(drawer).getByText('local-user')).toBeTruthy()
+    expect(within(drawer).getByText('/workspace/g1')).toBeTruthy()
+    expect(within(drawer).getByText(/thread-r…7890/)).toBeTruthy()
+    expect(within(drawer).getByText('short')).toBeTruthy()
+    fireEvent.click(within(drawer).getByRole('button', { name: '关闭 Task Detail' }))
+    expect(props.actions.selectTask).toHaveBeenCalledWith(null)
+  })
+
+  it('shows detail loading/unavailable states and closes on backdrop', () => {
+    const loadingProps = rootProps({
+      selectedTaskId: blocked.id,
+      remote: { detailTaskId: blocked.id, detail: undefined, detailLoading: true },
+    })
+    const view = render(<WorkConsoleRoot {...loadingProps} />)
+    expect(screen.getByText('正在读取 Task Detail…')).toBeTruthy()
+
+    const unavailableProps = rootProps({
+      selectedTaskId: blocked.id,
+      remote: { detailTaskId: blocked.id, detail: undefined, detailLoading: false },
+    })
+    view.rerender(<WorkConsoleRoot {...unavailableProps} />)
+    expect(screen.getByText('Task Detail 暂不可用')).toBeTruthy()
+    const backdrop = screen.getByLabelText('Task Detail').parentElement!
+    fireEvent.mouseDown(backdrop)
+    expect(unavailableProps.actions.selectTask).toHaveBeenCalledWith(null)
+  })
+
+  it('routes task clicks, manual refresh/errors, polling, Escape, and closed state without creating model work', () => {
+    vi.useFakeTimers()
     const selectTask = vi.fn()
     const refreshConsole = vi.fn()
     const clearError = vi.fn()
     const closeConsole = vi.fn()
-    const props = rootProps({
-      selectTask,
-      refreshConsole,
-      clearError,
-      closeConsole,
-      useWorkConsole: select => select({
-        loading: false,
-        detailLoading: false,
-        error: 'transport failed',
-        snapshot,
-        detailTaskId: 'task-p0',
-        detail,
-      }),
-    })
-    render(<WorkConsoleRoot {...props} />)
-    fireEvent.click(screen.getByRole('button', { name: /RAG 缓存优化/ }))
-    expect(selectTask).toHaveBeenCalledWith('task-blocked')
+    const props = { ...rootProps({ remote: { error: 'offline' } }), selectTask, refreshConsole, clearError, closeConsole }
+    const view = render(<WorkConsoleRoot {...props} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /G1 雷达漂移修复/ }))
+    expect(selectTask).toHaveBeenCalledWith(running.id)
     fireEvent.click(screen.getByRole('button', { name: '刷新' }))
-    expect(refreshConsole).toHaveBeenCalledWith('task-p0')
+    expect(refreshConsole).toHaveBeenCalledWith(null)
     fireEvent.click(screen.getByText('关闭', { selector: 'button' }))
     expect(clearError).toHaveBeenCalledOnce()
-    fireEvent.click(screen.getByRole('button', { name: '关闭工作台' }))
-    expect(closeConsole).toHaveBeenCalledOnce()
-  })
 
-  it('polls only while open and closes on Escape', () => {
-    vi.useFakeTimers()
-    const refreshConsole = vi.fn()
-    const closeConsole = vi.fn()
-    const view = render(<WorkConsoleRoot {...rootProps({ refreshConsole, closeConsole })} />)
     act(() => { vi.advanceTimersByTime(5_000) })
-    expect(refreshConsole).toHaveBeenCalledWith('task-p0')
+    expect(refreshConsole).toHaveBeenCalledTimes(2)
+    fireEvent.keyDown(window, { key: 'Enter' })
+    expect(closeConsole).not.toHaveBeenCalled()
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(closeConsole).toHaveBeenCalledOnce()
-    view.unmount()
+
+    view.rerender(<WorkConsoleRoot {...rootProps({ open: false })} />)
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('renders closed and loading/empty states without inventing task facts', () => {
-    const { rerender } = render(<WorkConsoleRoot {...rootProps({
-      useStore: select => select({ open: false, selectedTaskId: null }),
-    })} />)
-    expect(screen.queryByRole('dialog')).toBeNull()
-    const loadingState: WorkConsoleControllerState = { loading: true, detailLoading: false }
-    rerender(<WorkConsoleRoot {...rootProps({
-      useStore: select => select({ open: true, selectedTaskId: null }),
-      useWorkConsole: select => select(loadingState),
-    })} />)
-    expect(screen.getByText('正在读取全局资源事实…')).toBeTruthy()
-    expect(screen.getByText('选择一个 Task 查看执行与验收事实')).toBeTruthy()
+  it('renders empty zones and handles a human-ready card without a pending count from an older wire', () => {
+    const legacyReady = task({
+      id: 'legacy-human-ready', title: '旧协议验收', priority: 'p2', status: 'validation',
+      validation: { state: 'pending', requiredPassed: 1, requiredTotal: 2, acceptanceState: 'human-ready' },
+    })
+    const emptyish: WorkConsoleSnapshot = {
+      generatedAt: snapshot.generatedAt,
+      ideas: [],
+      tasks: [legacyReady],
+      resources: { nodes: { total: 0, online: 0, degraded: 0, offline: 0 }, environments: { total: 0, ready: 0, degraded: 0, unavailable: 0 }, runners: [] },
+      pending: { blockedTasks: 0, validationTasks: 1, pendingUserAcceptance: 1 },
+    }
+    render(<WorkConsoleRoot {...rootProps({ remote: { snapshot: emptyish } })} />)
+    expect(screen.getByText('暂无想法')).toBeTruthy()
+    expect(screen.getByText('当前没有执行中的 Task')).toBeTruthy()
+    expect(screen.getByText(/人工门禁 0/)).toBeTruthy()
   })
 })

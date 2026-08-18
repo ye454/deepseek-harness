@@ -2,11 +2,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { WorkConsoleSnapshot, WorkConsoleTaskDetail } from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
-import { WorkConsoleController, chooseWorkConsoleTask } from '../src/client/controller.ts'
+import { WorkConsoleController } from '../src/client/controller.ts'
 
-function snapshot(title: string, priority: 'p0' | 'p1' | 'p2' = 'p1', status: 'unclaimed' | 'running' | 'blocked' | 'validation' | 'done' = 'running'): WorkConsoleSnapshot {
+function snapshot(title: string, priority: 'p0' | 'p1' | 'p2' = 'p1'): WorkConsoleSnapshot {
   return {
     generatedAt: '2026-08-16T00:00:00.000Z',
+    ideas: [],
     tasks: [{
       id: title,
       revision: 1,
@@ -14,7 +15,7 @@ function snapshot(title: string, priority: 'p0' | 'p1' | 'p2' = 'p1', status: 'u
       summary: '',
       tags: [],
       priority,
-      status,
+      status: 'running',
       execution: { threadCount: 0, runningThreadCount: 0, blockedThreadCount: 0 },
       updatedAt: '2026-08-16T00:00:00.000Z',
     }],
@@ -192,28 +193,5 @@ describe('WorkConsoleController', () => {
       detail: { card: { id: 'new' } },
       error: undefined,
     })
-  })
-})
-
-describe('chooseWorkConsoleTask', () => {
-  it('retains a valid selection and otherwise prefers P0 over ordinary running work', () => {
-    const mixed: WorkConsoleSnapshot = {
-      ...snapshot('p1'),
-      tasks: [snapshot('p1').tasks[0]!, snapshot('p0', 'p0').tasks[0]!],
-    }
-    expect(chooseWorkConsoleTask(mixed, 'p1')).toBe('p1')
-    expect(chooseWorkConsoleTask(mixed, 'missing')).toBe('p0')
-    expect(chooseWorkConsoleTask(mixed, null)).toBe('p0')
-  })
-
-  it('falls back from P0 to running, then first Task, then null', () => {
-    const running = snapshot('running', 'p2', 'running')
-    expect(chooseWorkConsoleTask(running, null)).toBe('running')
-
-    const firstOnly = snapshot('first', 'p2', 'blocked')
-    expect(chooseWorkConsoleTask(firstOnly, null)).toBe('first')
-
-    const empty: WorkConsoleSnapshot = { ...firstOnly, tasks: [] }
-    expect(chooseWorkConsoleTask(empty, null)).toBeNull()
   })
 })

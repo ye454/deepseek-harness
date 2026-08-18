@@ -258,7 +258,7 @@ function validationProjection(ctx: Context, task: TaskWorkItem): WorkConsoleVali
   if (summary.state === 'passed') acceptanceState = 'passed'
   else if (automatedRequiredFailed) acceptanceState = 'automated-failed'
   else if (automatedRequiredPassed < automatedRequiredTotal) acceptanceState = 'automated-pending'
-  else if (pendingRequiredUser > 0) acceptanceState = 'human-ready'
+  else if (task.status === 'validation' && pendingRequiredUser > 0) acceptanceState = 'human-ready'
   else acceptanceState = 'automated-pending'
 
   return {

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
@@ -9,8 +9,6 @@ import WorkNodeRegistry from '@deepseek-ai/dsh-work-node'
 import WorkValidationService from '@deepseek-ai/dsh-work-validation'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 import WorkConsoleGateway from '../src/index.ts'
-
-afterEach(() => { vi.restoreAllMocks() })
 
 async function harness() {
   const ctx = new Context()
@@ -28,39 +26,108 @@ async function harness() {
   return ctx
 }
 
-async function validationTask(ctx: Context) {
-  const idea = await ctx.workControl.createIdea({ title: 'Pending guard' })
+async function validationTask(ctx: Context, title: string) {
+  const idea = await ctx.workControl.createIdea({ title })
   const promoted = await ctx.workControl.promoteIdea({ id: idea.id, revision: idea.revision })
-  let task = await ctx.workControl.organizeTask({ id: promoted.id, revision: promoted.revision }, {
-    taskType: 'review',
+  return await ctx.workControl.organizeTask({ id: promoted.id, revision: promoted.revision }, {
+    taskType: 'custom',
     workflow: { version: 1, stages: [{ id: 'review', title: 'Review', kind: 'validation' }] },
     validationPolicy: {
       version: 1,
-      validators: [{ kind: 'user-acceptance', requirement: 'required', label: 'Human approval' }],
+      validators: [
+        { kind: 'smoke-test', requirement: 'required', label: 'Automated smoke' },
+        { kind: 'user-acceptance', requirement: 'required', label: 'Human approval' },
+      ],
     },
   })
-  task = await ctx.workControl.setStatus({ id: task.id, revision: task.revision }, 'validation')
-  return task
 }
 
-describe('WorkConsole pending-summary defensive reads', () => {
-  it('does not invent pending user acceptance when the backing Task disappears during read projection', async () => {
+function card(ctx: Context, taskId: string) {
+  const result = ctx.workConsole.snapshot().tasks.find(task => task.id === taskId)
+  if (result === undefined) throw new Error(`missing projected task ${taskId}`)
+  return result
+}
+
+describe('WorkConsole automated -> human acceptance routing', () => {
+  it('keeps human acceptance hidden while required automated validation has not passed', async () => {
     const ctx = await harness()
-    await validationTask(ctx)
-    vi.spyOn(ctx.workControl, 'get').mockReturnValue(undefined)
-    expect(ctx.workConsole.snapshot().pending).toMatchObject({ validationTasks: 1, pendingUserAcceptance: 0 })
+    let task = await validationTask(ctx, 'Automation pending')
+    task = await ctx.workControl.setStatus({ id: task.id, revision: task.revision }, 'validation')
+
+    expect(card(ctx, String(task.id)).validation).toMatchObject({
+      acceptanceState: 'automated-pending',
+      pendingUserAcceptance: 0,
+    })
+    expect(ctx.workConsole.snapshot().pending.pendingUserAcceptance).toBe(0)
     await ctx.fiber.dispose()
   })
 
-  it('treats a validation Task with no policy as having no pending validators', async () => {
+  it('routes a Task to human acceptance only after required automation passes', async () => {
     const ctx = await harness()
-    const task = await validationTask(ctx)
-    const current = ctx.workControl.get(task.id)
-    if (current?.kind !== 'task') throw new Error('expected Task')
-    const { validationPolicy, ...withoutPolicy } = current
-    void validationPolicy
-    vi.spyOn(ctx.workControl, 'get').mockReturnValue(withoutPolicy)
-    expect(ctx.workConsole.snapshot().pending).toMatchObject({ validationTasks: 1, pendingUserAcceptance: 0 })
+    const task = await validationTask(ctx, 'Human ready')
+    const session = await ctx.workValidation.beginValidation({ id: task.id, revision: task.revision })
+    await ctx.workValidation.recordAutomatedResult({
+      taskId: task.id,
+      generation: session.generation,
+      validatorIndex: 0,
+      outcome: 'passed',
+      evidence: [{ kind: 'test', label: 'smoke', reference: 'ci:smoke' }],
+    })
+
+    expect(card(ctx, String(task.id)).validation).toMatchObject({
+      state: 'pending',
+      acceptanceState: 'human-ready',
+      pendingUserAcceptance: 1,
+    })
+    expect(ctx.workConsole.snapshot().pending.pendingUserAcceptance).toBe(1)
+    await ctx.fiber.dispose()
+  })
+
+  it('keeps an automated failure out of the human acceptance queue', async () => {
+    const ctx = await harness()
+    const task = await validationTask(ctx, 'Automation failed')
+    const session = await ctx.workValidation.beginValidation({ id: task.id, revision: task.revision })
+    await ctx.workValidation.recordAutomatedResult({
+      taskId: task.id,
+      generation: session.generation,
+      validatorIndex: 0,
+      outcome: 'failed',
+      evidence: [{ kind: 'test', label: 'smoke', reference: 'ci:failed' }],
+    })
+
+    expect(card(ctx, String(task.id)).validation).toMatchObject({
+      state: 'failed',
+      acceptanceState: 'automated-failed',
+      pendingUserAcceptance: 0,
+    })
+    expect(ctx.workConsole.snapshot().pending.pendingUserAcceptance).toBe(0)
+    await ctx.fiber.dispose()
+  })
+
+  it('marks acceptance fully passed after the explicit user decision', async () => {
+    const ctx = await harness()
+    const task = await validationTask(ctx, 'Accepted')
+    const session = await ctx.workValidation.beginValidation({ id: task.id, revision: task.revision })
+    await ctx.workValidation.recordAutomatedResult({
+      taskId: task.id,
+      generation: session.generation,
+      validatorIndex: 0,
+      outcome: 'passed',
+      evidence: [{ kind: 'test', label: 'smoke', reference: 'ci:passed' }],
+    })
+    await ctx.workValidation.recordUserAcceptance({
+      taskId: task.id,
+      generation: session.generation,
+      validatorIndex: 1,
+      outcome: 'passed',
+      actor: 'local-user',
+    })
+
+    expect(card(ctx, String(task.id)).validation).toMatchObject({
+      state: 'passed',
+      acceptanceState: 'passed',
+      pendingUserAcceptance: 0,
+    })
     await ctx.fiber.dispose()
   })
 })

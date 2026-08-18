@@ -10,17 +10,12 @@ import { apply, inject } from '../src/client/index.ts'
 import type { WorkConsoleInjected } from '../src/client/contract.ts'
 
 const snapshot: WorkConsoleSnapshot = {
-  generatedAt: '2026-08-17T01:00:00.000Z',
+  generatedAt: '2026-08-18T01:00:00.000Z',
+  ideas: [],
   tasks: [{
-    id: 'task-p0',
-    revision: 1,
-    title: 'P0 task',
-    summary: '',
-    tags: [],
-    priority: 'p0',
-    status: 'running',
+    id: 'task-p0', revision: 1, title: 'P0 task', summary: '', tags: [], priority: 'p0', status: 'running',
     execution: { threadCount: 0, runningThreadCount: 0, blockedThreadCount: 0 },
-    updatedAt: '2026-08-17T01:00:00.000Z',
+    updatedAt: '2026-08-18T01:00:00.000Z',
   }],
   resources: {
     nodes: { total: 0, online: 0, degraded: 0, offline: 0 },
@@ -30,20 +25,11 @@ const snapshot: WorkConsoleSnapshot = {
   pending: { blockedTasks: 0, validationTasks: 0, pendingUserAcceptance: 0 },
 }
 
-const detail: WorkConsoleTaskDetail = {
-  card: snapshot.tasks[0]!,
-  threads: [],
-  environments: [],
-  validators: [],
-}
+const detail: WorkConsoleTaskDetail = { card: snapshot.tasks[0]!, threads: [], environments: [], validators: [] }
 
-type TestParentProps =
-  & PropsRuntime<'root'>
-  & PropsRenderSlots<'sidebar.footer.action' | 'shell.overlay'>
+type TestParentProps = PropsRuntime<'root'> & PropsRenderSlots<'sidebar.footer.action' | 'shell.overlay'>
 
 function TestParent(props: TestParentProps) {
-  // The test parent declares these slots only to exercise contribution wiring;
-  // consuming the render seat keeps the same declaration contract as production.
   void props.renderSlot
   return null
 }
@@ -53,9 +39,7 @@ async function bench() {
   await ctx.plugin(SlotRegistry).await()
   const snapshotRemote = vi.fn().mockResolvedValue({ ok: true, value: snapshot })
   const taskRemote = vi.fn().mockResolvedValue({ ok: true, value: detail })
-  ctx.provide('remote', {
-    workConsole: { snapshot: snapshotRemote, task: taskRemote },
-  } as never)
+  ctx.provide('remote', { workConsole: { snapshot: snapshotRemote, task: taskRemote } } as never)
 
   const parent = ctx.plugin({
     apply(parentCtx: Context) {
@@ -99,23 +83,51 @@ describe('ui-work-console client apply', () => {
     expect(sidebarFace.hooks.workConsole).toBe(overlayFace.hooks.workConsole)
   })
 
-  it('wires open, refresh, selection, clear-error and close through the injected face', async () => {
+  it('opens the lightweight surface without auto-selecting or loading a Task Detail', async () => {
     const { ctx, snapshotRemote, taskRemote } = await bench()
     const actions = { open: vi.fn(), close: vi.fn(), selectTask: vi.fn() }
     const face = injectedFace(ctx, actions)
 
     face.openConsole(null)
-    await vi.waitFor(() => {
-      expect(snapshotRemote).toHaveBeenCalled()
-      expect(actions.open).toHaveBeenCalledOnce()
-      expect(actions.selectTask).toHaveBeenCalledWith('task-p0')
-      expect(taskRemote).toHaveBeenCalledWith('task-p0')
-    })
+    await vi.waitFor(() => { expect(snapshotRemote).toHaveBeenCalledOnce() })
+    expect(actions.open).toHaveBeenCalledOnce()
+    expect(actions.selectTask).not.toHaveBeenCalled()
+    expect(taskRemote).not.toHaveBeenCalled()
+  })
+
+  it('refreshes an existing selection and loads only that Task Detail', async () => {
+    const { ctx, snapshotRemote, taskRemote } = await bench()
+    const actions = { open: vi.fn(), close: vi.fn(), selectTask: vi.fn() }
+    const face = injectedFace(ctx, actions)
 
     face.refreshConsole('task-p0')
-    await vi.waitFor(() => { expect(snapshotRemote).toHaveBeenCalledTimes(2) })
+    await vi.waitFor(() => {
+      expect(snapshotRemote).toHaveBeenCalledOnce()
+      expect(taskRemote).toHaveBeenCalledWith('task-p0')
+    })
+    expect(actions.selectTask).not.toHaveBeenCalled()
+  })
+
+  it('clears a selection that disappeared from the refreshed snapshot', async () => {
+    const { ctx, snapshotRemote, taskRemote } = await bench()
+    const actions = { open: vi.fn(), close: vi.fn(), selectTask: vi.fn() }
+    const face = injectedFace(ctx, actions)
+    snapshotRemote.mockResolvedValueOnce({ ok: true, value: { ...snapshot, tasks: [] } })
+
+    face.refreshConsole('task-p0')
+    await vi.waitFor(() => { expect(snapshotRemote).toHaveBeenCalledOnce() })
+    expect(actions.selectTask).toHaveBeenCalledWith(null)
+    expect(taskRemote).not.toHaveBeenCalled()
+  })
+
+  it('wires explicit selection, clear-error, and close callbacks', async () => {
+    const { ctx, taskRemote } = await bench()
+    const actions = { open: vi.fn(), close: vi.fn(), selectTask: vi.fn() }
+    const face = injectedFace(ctx, actions)
+
     face.selectTask('task-p0')
-    await vi.waitFor(() => { expect(taskRemote.mock.calls.length).toBeGreaterThanOrEqual(3) })
+    await vi.waitFor(() => { expect(taskRemote).toHaveBeenCalledWith('task-p0') })
+    expect(actions.selectTask).toHaveBeenCalledWith('task-p0')
     face.clearError()
     face.closeConsole()
     expect(actions.close).toHaveBeenCalledOnce()
@@ -127,19 +139,7 @@ describe('ui-work-console client apply', () => {
     const actions = { open: vi.fn(), close: vi.fn(), selectTask: vi.fn() }
     const face = injectedFace(ctx, actions)
 
-    face.refreshConsole(null)
-    await vi.waitFor(() => { expect(snapshotRemote).toHaveBeenCalledOnce() })
-    expect(actions.selectTask).not.toHaveBeenCalled()
-    expect(taskRemote).not.toHaveBeenCalled()
-  })
-
-  it('keeps null selection and skips Detail when the global board is empty', async () => {
-    const { ctx, snapshotRemote, taskRemote } = await bench()
-    snapshotRemote.mockResolvedValueOnce({ ok: true, value: { ...snapshot, tasks: [] } })
-    const actions = { open: vi.fn(), close: vi.fn(), selectTask: vi.fn() }
-    const face = injectedFace(ctx, actions)
-
-    face.refreshConsole(null)
+    face.refreshConsole('task-p0')
     await vi.waitFor(() => { expect(snapshotRemote).toHaveBeenCalledOnce() })
     expect(actions.selectTask).not.toHaveBeenCalled()
     expect(taskRemote).not.toHaveBeenCalled()

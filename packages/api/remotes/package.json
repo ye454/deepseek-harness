@@ -74,7 +74,8 @@
     "@deepseek-ai/dsh-session-persistence": "workspace:^",
     "@deepseek-ai/dsh-settings": "workspace:^",
     "@deepseek-ai/dsh-typert-registry": "workspace:^",
-    "@deepseek-ai/dsh-work-console": "workspace:^"
+    "@deepseek-ai/dsh-work-console": "workspace:^",
+    "@deepseek-ai/dsh-work-console-commands": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-agent": "workspace:^",
@@ -93,6 +94,7 @@
     "@deepseek-ai/dsh-settings": "workspace:^",
     "@deepseek-ai/dsh-typert-registry": "workspace:^",
     "@deepseek-ai/dsh-work-console": "workspace:^",
+    "@deepseek-ai/dsh-work-console-commands": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   }
 }

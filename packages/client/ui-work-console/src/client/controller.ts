@@ -7,7 +7,7 @@ import type {
   WorkConsoleSnapshot,
   WorkConsoleTaskDetail,
 } from '@deepseek-ai/dsh-api-remotes/client'
-// Type-only: pulls the generated ctx.remote.workConsole namespace into this compilation face.
+// Type-only: pulls ctx.remote.workConsole into this program.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 
 /** Immutable business snapshot consumed through the framework-generated `useWorkConsole` hook. */
@@ -78,7 +78,7 @@ export class WorkConsoleController {
     this.publish({ ...this.state, detailLoading: true, detailTaskId: taskId, detail: undefined })
     try {
       const result = await this.ctx.remote.workConsole.task(taskId)
-      if (epoch !== this.detailEpoch || this.state.detailTaskId !== taskId) return this.state.detail
+      if (epoch !== this.detailEpoch) return this.state.detail
       if (!result.ok) {
         this.publish({
           ...this.state,
@@ -90,7 +90,7 @@ export class WorkConsoleController {
       this.publish({ ...this.state, detailLoading: false, detail: result.value })
       return result.value
     } catch (error) {
-      if (epoch !== this.detailEpoch || this.state.detailTaskId !== taskId) return this.state.detail
+      if (epoch !== this.detailEpoch) return this.state.detail
       this.publish({ ...this.state, detailLoading: false, error: renderError(error) })
       return undefined
     }

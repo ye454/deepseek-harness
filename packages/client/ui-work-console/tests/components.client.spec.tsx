@@ -295,7 +295,8 @@ describe('WorkConsoleRoot product surface', () => {
 
     view.rerender(<WorkConsoleRoot {...rootProps({ remote: { snapshot: undefined, loading: true } })} />)
     expect(screen.getByText('正在读取资源事实…')).toBeTruthy()
-    expect(screen.getByRole('button', { name: '刷新中…' })).toBeDisabled()
+    const refresh = screen.getByRole('button', { name: '刷新中…' }) as HTMLButtonElement
+    expect(refresh.disabled).toBe(true)
   })
 
   it('filters ideas/tasks by search and tasks by priority without moving acceptance semantics', () => {
@@ -312,8 +313,8 @@ describe('WorkConsoleRoot product surface', () => {
     expect(execution.getByText('RAG 缓存优化')).toBeTruthy()
     expect(execution.getByText('视觉回归失败')).toBeTruthy()
     expect(execution.queryByText('G1 雷达漂移修复')).toBeNull()
-    expect(screen.getByRole('region', { name: '验收区' })).toHaveTextContent('后台 UI 修复')
-    expect(screen.getByRole('region', { name: '想法区' })).toHaveTextContent('机器人异常自恢复')
+    expect(screen.getByRole('region', { name: '验收区' }).textContent).toContain('后台 UI 修复')
+    expect(screen.getByRole('region', { name: '想法区' }).textContent).toContain('机器人异常自恢复')
   })
 
   it('opens Task Detail only for a selected Task and closes it through the store action/backdrop', () => {
@@ -324,7 +325,7 @@ describe('WorkConsoleRoot product surface', () => {
     expect(within(drawer).getByText('方案验证')).toBeTruthy()
     expect(within(drawer).getByText('等待真机')).toBeTruthy()
     expect(within(drawer).getByText('log://42')).toBeTruthy()
-    expect(within(drawer).getByText('local-user')).toBeTruthy()
+    expect(within(drawer).getByText(/local-user/)).toBeTruthy()
     expect(within(drawer).getByText('/workspace/g1')).toBeTruthy()
     expect(within(drawer).getByText(/thread-r…7890/)).toBeTruthy()
     expect(within(drawer).getByText('short')).toBeTruthy()

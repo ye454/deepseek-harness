@@ -101,7 +101,11 @@ export class WorkConsoleCommandService extends TypertRemoteService {
         actor,
       })
     } catch (error) {
-      if (error instanceof WorkValidationError) return this.validationRaceFailure(request, taskId)
+      if (error instanceof WorkValidationError) {
+        const raced = this.inspectAcceptanceRequest(request, taskId)
+        if (!raced.ok) return raced
+        return rejected({ code: 'invalid-state', id: request.taskId, reason: error.message })
+      }
       if (error instanceof WorkItemConflictError) {
         const latest = this.ctx.workControl.get(taskId)
         return conflict(request.taskId, request.taskRevision, latest?.revision ?? error.actualRevision)
@@ -245,35 +249,6 @@ export class WorkConsoleCommandService extends TypertRemoteService {
       }
       throw error
     }
-  }
-
-  private validationRaceFailure(
-    request: DecideWorkConsoleAcceptanceRequest,
-    taskId: ReturnType<typeof WorkItemId>,
-  ): DecideWorkConsoleAcceptanceResult {
-    const item = this.ctx.workControl.get(taskId)
-    if (item === undefined) return rejected({ code: 'not-found', id: request.taskId })
-    if (item.kind !== 'task' || item.status !== 'validation') {
-      return rejected({
-        code: 'invalid-state',
-        id: request.taskId,
-        reason: item.kind !== 'task' ? 'work item is no longer a task' : `task status is ${item.status}`,
-      })
-    }
-    const session = this.ctx.workValidation.getSession(taskId)
-    if (session?.generation !== request.generation) {
-      return rejected({
-        code: 'stale-generation',
-        taskId: request.taskId,
-        expectedGeneration: request.generation,
-        ...(session === undefined ? {} : { currentGeneration: session.generation }),
-      })
-    }
-    const validator = item.validationPolicy?.validators[request.validatorIndex]
-    if (validator?.kind !== 'user-acceptance' || validator.requirement !== 'required') {
-      return rejected({ code: 'invalid-validator', taskId: request.taskId, validatorIndex: request.validatorIndex })
-    }
-    return this.automatedReadiness(item, request.generation)
   }
 }
 

@@ -267,7 +267,7 @@ describe('WorkConsoleRoot product surface', () => {
     expect(screen.getByText('1 不可用')).toBeTruthy()
     expect(screen.getByText('codex')).toBeTruthy()
     expect(screen.getByText('claude-code')).toBeTruthy()
-    expect(screen.getByText('待人工验收')).toBeTruthy()
+    expect(screen.getAllByText('待人工验收').length).toBeGreaterThanOrEqual(2)
   })
 
   it('covers degraded and healthy resource labels plus the loading strip', () => {

@@ -36,8 +36,8 @@ export interface WorkConsoleValidationView {
   readonly checkedAt?: string
   /** Whether automated gates are still running/failed, a human can now decide, or the task fully passed. */
   readonly acceptanceState: WorkConsoleAcceptanceState
-  /** Required user-acceptance entries that are currently actionable. */
-  readonly pendingUserAcceptance: number
+  /** Required user-acceptance entries that are currently actionable; absent is rendered as zero. */
+  readonly pendingUserAcceptance?: number
 }
 
 /** Current/most-relevant execution facts for a task card. */

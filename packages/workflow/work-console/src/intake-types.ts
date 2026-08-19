@@ -47,7 +47,7 @@ export interface OrganizedWorkConsoleTask {
   readonly stageId: string
 }
 
-/** Expected create rejection. */
+/** Expected passive-Idea capture rejection. */
 export interface WorkConsoleCommandInvalidInput {
   readonly code: 'invalid-input'
   readonly field: 'title' | 'summary' | 'tags'
@@ -56,7 +56,7 @@ export interface WorkConsoleCommandInvalidInput {
 
 export type CreateWorkConsoleIdeaResult =
   | WorkConsoleCommandSuccess<CreatedWorkConsoleIdea>
-  | WorkConsoleCommandRejected<WorkConsoleCommandInvalidInput>
+  | { readonly ok: false; readonly error: WorkConsoleCommandInvalidInput }
 
 export type OrganizeWorkConsoleTaskResult =
   | WorkConsoleCommandSuccess<OrganizedWorkConsoleTask>

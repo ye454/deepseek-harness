@@ -15,7 +15,6 @@ import {
   subprocessRunHandle,
   type SubagentResult,
   type SubagentRun,
-  type SubagentStartRequest,
   type SubagentStopReason,
 } from '@deepseek-ai/dsh-subagent'
 import type { SubprocessHandle, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
@@ -23,6 +22,14 @@ import { CodexAppServerWire } from './wire.ts'
 
 /** Default POSIX grace between subprocess termination tiers. */
 export const DEFAULT_DISPOSE_GRACE_MS = 3_000
+
+/** Minimal execution input shared by the Subagent provider and remote WorkNode adapters. */
+export interface CodexRunRequest {
+  /** Text-only user task delivered to the Codex app-server turn. */
+  readonly prompt: readonly ContentBlock[]
+  /** Canonical cancellation channel for startup and the published run. */
+  readonly signal: AbortSignal
+}
 
 /**
  * Resolve the fixed app-server command for a platform.
@@ -43,7 +50,7 @@ export function codexAppServerArgv(
 
 /** Fully resolved inputs for one Codex app-server run. */
 export interface CodexRunSpec {
-  /** Parent Session workspace, also supplied to `thread/start`. */
+  /** Workspace supplied to the child process and `thread/start`. */
   readonly cwd: string
   /** Explicit deployment/test environment layered after the shared scrub. */
   readonly env: Record<string, string>
@@ -62,7 +69,7 @@ function thrown(value: unknown): Error {
 
 /**
  * Validate and preserve the one-shot task before crossing the process boundary.
- * @param prompt - task content accepted from the shared subagent service.
+ * @param prompt - task content accepted from the shared subagent service or WorkNode daemon.
  * @returns the exact non-empty text block sequence.
  */
 export function textTask(prompt: readonly ContentBlock[]): string[] {
@@ -109,12 +116,14 @@ export async function disposeCodexChild(
 
 /**
  * Start the real `codex app-server --stdio` child and publish its one-shot run.
- * @param request - resolved shared subagent request.
+ * The runtime depends only on prompt/cancellation plus the resolved execution spec;
+ * parent Agent/session concerns remain in the Subagent adapter.
+ * @param request - text task and cancellation channel.
  * @param spec - Workspace, environment, process service, and diagnostic policy.
  * @returns the published run after initialization and ephemeral thread creation.
  */
 export async function startCodexRun(
-  request: SubagentStartRequest,
+  request: CodexRunRequest,
   spec: CodexRunSpec,
 ): Promise<SubagentRun> {
   const texts = textTask(request.prompt)

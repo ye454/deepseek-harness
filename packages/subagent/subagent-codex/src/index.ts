@@ -3,6 +3,9 @@
  * official `codex app-server --stdio` process in the delegating Session's
  * workspace and publishes only after an ephemeral thread exists.
  *
+ * The package also exports the parent-Agent-independent one-shot runtime so
+ * remote WorkNode adapters reuse the same official app-server implementation.
+ *
  * @module @deepseek-ai/dsh-subagent-codex
  */
 
@@ -22,6 +25,15 @@ import {
   startCodexRun,
   type CodexRunSpec,
 } from './run.ts'
+
+export {
+  codexAppServerArgv,
+  DEFAULT_DISPOSE_GRACE_MS,
+  disposeCodexChild,
+  startCodexRun,
+  textTask,
+} from './run.ts'
+export type { CodexRunRequest, CodexRunSpec } from './run.ts'
 
 export const name = 'subagent-codex'
 export const inject = ['subagents', 'subprocess']

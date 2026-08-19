@@ -630,12 +630,19 @@ function requireText(value: string, field: string): string {
 async function delay(ms: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) return
   await new Promise<void>(resolve => {
-    const timer = setTimeout(resolve, ms)
-    timer.unref()
-    signal.addEventListener('abort', () => {
+    let settled = false
+    const finish = (): void => {
+      if (settled) return
+      settled = true
       clearTimeout(timer)
+      signal.removeEventListener('abort', onAbort)
       resolve()
-    }, { once: true })
+    }
+    const onAbort = (): void => { finish() }
+    const timer = setTimeout(finish, ms)
+    timer.unref()
+    signal.addEventListener('abort', onAbort, { once: true })
+    if (signal.aborted) finish()
   })
 }
 

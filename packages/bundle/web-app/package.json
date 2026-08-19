@@ -102,7 +102,6 @@
     "@deepseek-ai/dsh-storage-domain": "workspace:^",
     "@deepseek-ai/dsh-storage-json": "workspace:^",
     "@deepseek-ai/dsh-work-console": "workspace:^",
-    "@deepseek-ai/dsh-work-console-commands": "workspace:^",
     "@deepseek-ai/dsh-work-control": "workspace:^",
     "@deepseek-ai/dsh-work-environment": "workspace:^",
     "@deepseek-ai/dsh-work-execution": "workspace:^",

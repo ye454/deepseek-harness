@@ -20,6 +20,8 @@ import type {
   WorkConsoleCommandSuccess,
 } from './types.ts'
 
+const acceptanceTailsByContext = new WeakMap<Context, Map<string, Promise<void>>>()
+
 /** Promote one passive Idea into `organizing`; no Runner/model/environment is started here. */
 export async function promoteWorkConsoleIdea(
   ctx: Context,
@@ -62,70 +64,72 @@ export async function decideWorkConsoleAcceptance(
   request: DecideWorkConsoleAcceptanceRequest,
 ): Promise<DecideWorkConsoleAcceptanceResult> {
   const taskId = WorkItemId(request.taskId)
-  const inspected = inspectAcceptanceRequest(ctx, request, taskId)
-  if (!inspected.ok) return inspected
+  return await withAcceptanceLock(ctx, String(taskId), async () => {
+    const inspected = inspectAcceptanceRequest(ctx, request, taskId)
+    if (!inspected.ok) return inspected
 
-  const actor = `harness-home:${getOrCreateAnonymousUserId()}`
-  try {
-    await ctx.workValidation.recordUserAcceptance({
-      taskId,
-      generation: request.generation,
-      validatorIndex: request.validatorIndex,
-      outcome: request.decision === 'accept' ? 'passed' : 'failed',
-      actor,
-    })
-  } catch (error) {
-    if (error instanceof WorkValidationError) {
-      const raced = inspectAcceptanceRequest(ctx, request, taskId)
-      if (!raced.ok) return raced
-      return rejected({ code: 'invalid-state', id: request.taskId, reason: error.message })
+    const actor = `harness-home:${getOrCreateAnonymousUserId()}`
+    try {
+      await ctx.workValidation.recordUserAcceptance({
+        taskId,
+        generation: request.generation,
+        validatorIndex: request.validatorIndex,
+        outcome: request.decision === 'accept' ? 'passed' : 'failed',
+        actor,
+      })
+    } catch (error) {
+      if (error instanceof WorkValidationError) {
+        const raced = inspectAcceptanceRequest(ctx, request, taskId)
+        if (!raced.ok) return raced
+        return rejected({ code: 'invalid-state', id: request.taskId, reason: error.message })
+      }
+      if (error instanceof WorkItemConflictError) {
+        const latest = ctx.workControl.get(taskId)
+        return conflict(request.taskId, request.taskRevision, latest?.revision ?? error.actualRevision)
+      }
+      throw error
     }
-    if (error instanceof WorkItemConflictError) {
-      const latest = ctx.workControl.get(taskId)
-      return conflict(request.taskId, request.taskRevision, latest?.revision ?? error.actualRevision)
+
+    const afterDecision = requireCurrentTask(ctx, taskId)
+    if (!afterDecision.ok) return afterDecision
+
+    if (request.decision === 'return') {
+      return returnToExecution(ctx, request, afterDecision.value)
     }
-    throw error
-  }
 
-  const afterDecision = requireCurrentTask(ctx, taskId)
-  if (!afterDecision.ok) return afterDecision
-
-  if (request.decision === 'return') {
-    return returnToExecution(ctx, request, afterDecision.value)
-  }
-
-  const readiness = automatedReadiness(ctx, afterDecision.value, request.generation)
-  if (!readiness.ok) return readiness
-  if (afterDecision.value.validation?.state !== 'passed') {
-    return success({
-      taskId: String(afterDecision.value.id),
-      revision: afterDecision.value.revision,
-      status: 'validation',
-      decision: 'accept',
-    })
-  }
-
-  try {
-    const done = await ctx.workControl.setStatus(
-      { id: afterDecision.value.id, revision: afterDecision.value.revision },
-      'done',
-    )
-    return success({
-      taskId: String(done.id),
-      revision: done.revision,
-      status: 'done',
-      decision: 'accept',
-    })
-  } catch (error) {
-    if (error instanceof WorkItemConflictError) {
-      const latest = ctx.workControl.get(taskId)
-      return conflict(request.taskId, afterDecision.value.revision, latest?.revision ?? error.actualRevision)
+    const readiness = automatedReadiness(ctx, afterDecision.value, request.generation)
+    if (!readiness.ok) return readiness
+    if (afterDecision.value.validation?.state !== 'passed') {
+      return success({
+        taskId: String(afterDecision.value.id),
+        revision: afterDecision.value.revision,
+        status: 'validation',
+        decision: 'accept',
+      })
     }
-    if (error instanceof WorkItemTransitionError) {
-      return rejected({ code: 'invalid-state', id: request.taskId, reason: error.message })
+
+    try {
+      const done = await ctx.workControl.setStatus(
+        { id: afterDecision.value.id, revision: afterDecision.value.revision },
+        'done',
+      )
+      return success({
+        taskId: String(done.id),
+        revision: done.revision,
+        status: 'done',
+        decision: 'accept',
+      })
+    } catch (error) {
+      if (error instanceof WorkItemConflictError) {
+        const latest = ctx.workControl.get(taskId)
+        return conflict(request.taskId, afterDecision.value.revision, latest?.revision ?? error.actualRevision)
+      }
+      if (error instanceof WorkItemTransitionError) {
+        return rejected({ code: 'invalid-state', id: request.taskId, reason: error.message })
+      }
+      throw error
     }
-    throw error
-  }
+  })
 }
 
 function inspectAcceptanceRequest(
@@ -224,6 +228,31 @@ async function returnToExecution(
       return rejected({ code: 'invalid-state', id: request.taskId, reason: error.message })
     }
     throw error
+  }
+}
+
+async function withAcceptanceLock<T>(
+  ctx: Context,
+  taskId: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  let tails = acceptanceTailsByContext.get(ctx)
+  if (tails === undefined) {
+    tails = new Map<string, Promise<void>>()
+    acceptanceTailsByContext.set(ctx, tails)
+  }
+  const previous = tails.get(taskId) ?? Promise.resolve()
+  let release!: () => void
+  const next = new Promise<void>(resolve => { release = resolve })
+  const tail = previous.then(() => next)
+  tails.set(taskId, tail)
+  await previous
+  try {
+    return await operation()
+  } finally {
+    release()
+    if (tails.get(taskId) === tail) tails.delete(taskId)
+    if (tails.size === 0) acceptanceTailsByContext.delete(ctx)
   }
 }
 

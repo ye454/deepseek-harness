@@ -14,6 +14,13 @@ import type { WorkValidatorResult } from '@deepseek-ai/dsh-work-validation'
 // Typert-generated ./typert and ./remote artifacts import Zod at runtime.
 import type {} from 'zod'
 import { decideWorkConsoleAcceptance, promoteWorkConsoleIdea } from './commands.ts'
+import { createWorkConsoleIdea, organizeWorkConsoleTask } from './intake-commands.ts'
+import type {
+  CreateWorkConsoleIdeaRequest,
+  CreateWorkConsoleIdeaResult,
+  OrganizeWorkConsoleTaskRequest,
+  OrganizeWorkConsoleTaskResult,
+} from './intake-types.ts'
 import type {
   DecideWorkConsoleAcceptanceRequest,
   DecideWorkConsoleAcceptanceResult,
@@ -38,6 +45,7 @@ import type {
 } from './types.ts'
 
 export type * from './types.ts'
+export type * from './intake-types.ts'
 
 /** Host Remote used by the browser work-console surface. */
 export class WorkConsoleGateway extends TypertRemoteService {
@@ -47,10 +55,22 @@ export class WorkConsoleGateway extends TypertRemoteService {
     super(ctx, 'workConsole')
   }
 
+  /** Capture a passive Idea. No Task, Runner, model, or Environment is created. */
+  @Remote('createIdea')
+  createIdea(request: CreateWorkConsoleIdeaRequest): Promise<CreateWorkConsoleIdeaResult> {
+    return createWorkConsoleIdea(this.ctx, request)
+  }
+
   /** Explicitly move a passive Idea into organizing; never starts a model/Runner/Environment. */
   @Remote('promoteIdea')
   promoteIdea(request: PromoteWorkConsoleIdeaRequest): Promise<PromoteWorkConsoleIdeaResult> {
     return promoteWorkConsoleIdea(this.ctx, request)
+  }
+
+  /** Commit one human-selected deterministic workflow/validation template and enter its first stage. */
+  @Remote('organizeTask')
+  organizeTask(request: OrganizeWorkConsoleTaskRequest): Promise<OrganizeWorkConsoleTaskResult> {
+    return organizeWorkConsoleTask(this.ctx, request)
   }
 
   /** Record one Host-owned human acceptance/return decision after automated gates are satisfied. */

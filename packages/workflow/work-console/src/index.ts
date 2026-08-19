@@ -6,6 +6,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import WorkConsoleCommandService from '@deepseek-ai/dsh-work-console-commands'
 import { WorkItemId, type IdeaWorkItem, type TaskWorkItem } from '@deepseek-ai/dsh-work-control'
 import type { ExecutionThread } from '@deepseek-ai/dsh-work-execution'
 import type { WorkEnvironment } from '@deepseek-ai/dsh-work-environment'
@@ -39,6 +40,7 @@ export class WorkConsoleGateway extends TypertRemoteService {
 
   constructor(ctx: Context) {
     super(ctx, 'workConsole')
+    ctx.plugin(WorkConsoleCommandService)
   }
 
   /**

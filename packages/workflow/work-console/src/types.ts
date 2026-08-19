@@ -1,6 +1,7 @@
 /**
- * Client-safe read-model vocabulary for the global continuous-work console.
+ * Client-safe read/write vocabulary for the global continuous-work console.
  * Detailed logs and artifact payloads intentionally remain outside this projection.
+ * Browser mutation requests never contain an acceptance actor; the Host owns that identity boundary.
  * @module @deepseek-ai/dsh-work-console/types
  */
 
@@ -120,7 +121,7 @@ export interface WorkConsolePendingSummary {
   readonly pendingUserAcceptance: number
 }
 
-/** Read-only main-dashboard snapshot. */
+/** Main-dashboard snapshot. */
 export interface WorkConsoleSnapshot {
   readonly generatedAt: string
   readonly ideas: readonly WorkConsoleIdeaCard[]
@@ -199,3 +200,103 @@ export interface WorkConsoleTaskDetail {
   readonly validationGeneration?: number
   readonly validators: readonly WorkConsoleValidatorDetail[]
 }
+
+/** Explicit promotion of one passive Idea into the execution area. */
+export interface PromoteWorkConsoleIdeaRequest {
+  readonly id: string
+  readonly revision: number
+  readonly priority?: 'p0' | 'p1' | 'p2'
+}
+
+/** Human decision for one required user-acceptance entry in the active Validation Generation. */
+export interface DecideWorkConsoleAcceptanceRequest {
+  readonly taskId: string
+  readonly taskRevision: number
+  readonly generation: number
+  readonly validatorIndex: number
+  readonly decision: 'accept' | 'return'
+}
+
+/** Compact mutation acknowledgement returned after promotion. */
+export interface PromotedWorkConsoleTask {
+  readonly id: string
+  readonly revision: number
+  readonly status: 'organizing'
+  readonly priority: 'p0' | 'p1' | 'p2'
+}
+
+/** Compact post-decision Task state. */
+export interface WorkConsoleAcceptanceDecisionValue {
+  readonly taskId: string
+  readonly revision: number
+  readonly status: 'validation' | 'done' | 'running'
+  readonly decision: 'accept' | 'return'
+}
+
+export interface WorkConsoleCommandNotFound {
+  readonly code: 'not-found'
+  readonly id: string
+}
+
+export interface WorkConsoleCommandConflict {
+  readonly code: 'conflict'
+  readonly id: string
+  readonly expectedRevision: number
+  readonly currentRevision: number
+}
+
+export interface WorkConsoleCommandInvalidState {
+  readonly code: 'invalid-state'
+  readonly id: string
+  readonly reason: string
+}
+
+export interface WorkConsoleCommandStaleGeneration {
+  readonly code: 'stale-generation'
+  readonly taskId: string
+  readonly expectedGeneration: number
+  readonly currentGeneration?: number
+}
+
+export interface WorkConsoleCommandInvalidValidator {
+  readonly code: 'invalid-validator'
+  readonly taskId: string
+  readonly validatorIndex: number
+}
+
+export interface WorkConsoleCommandNotReady {
+  readonly code: 'not-ready'
+  readonly taskId: string
+  readonly reason: 'automated-pending' | 'automated-failed'
+}
+
+/** Stable expected business failures from Work Console mutation commands. */
+export type WorkConsoleCommandFailure =
+  | WorkConsoleCommandNotFound
+  | WorkConsoleCommandConflict
+  | WorkConsoleCommandInvalidState
+  | WorkConsoleCommandStaleGeneration
+  | WorkConsoleCommandInvalidValidator
+  | WorkConsoleCommandNotReady
+
+/** Successful command result. */
+export interface WorkConsoleCommandSuccess<T> {
+  readonly ok: true
+  readonly value: T
+}
+
+/** Expected command rejection. Infrastructure/storage failures still throw. */
+export interface WorkConsoleCommandRejected<E extends WorkConsoleCommandFailure = WorkConsoleCommandFailure> {
+  readonly ok: false
+  readonly error: E
+}
+
+/** Result from `promoteIdea`. */
+export type PromoteWorkConsoleIdeaResult =
+  | WorkConsoleCommandSuccess<PromotedWorkConsoleTask>
+  | WorkConsoleCommandRejected<WorkConsoleCommandNotFound | WorkConsoleCommandConflict | WorkConsoleCommandInvalidState>
+
+/** Result from `decideAcceptance`. */
+export type DecideWorkConsoleAcceptanceResult =
+  | WorkConsoleCommandSuccess<WorkConsoleAcceptanceDecisionValue>
+  | WorkConsoleCommandRejected<WorkConsoleCommandFailure>

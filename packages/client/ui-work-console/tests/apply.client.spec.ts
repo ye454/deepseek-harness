@@ -39,7 +39,22 @@ async function bench() {
   await ctx.plugin(SlotRegistry).await()
   const snapshotRemote = vi.fn().mockResolvedValue({ ok: true, value: snapshot })
   const taskRemote = vi.fn().mockResolvedValue({ ok: true, value: detail })
-  ctx.provide('remote', { workConsole: { snapshot: snapshotRemote, task: taskRemote } } as never)
+  const promoteRemote = vi.fn().mockResolvedValue({
+    ok: true,
+    value: { ok: true, value: { id: 'idea-1', revision: 2, status: 'organizing', priority: 'p2' } },
+  })
+  const decideRemote = vi.fn().mockResolvedValue({
+    ok: true,
+    value: { ok: true, value: { taskId: 'task-p0', revision: 2, status: 'done', decision: 'accept' } },
+  })
+  ctx.provide('remote', {
+    workConsole: {
+      snapshot: snapshotRemote,
+      task: taskRemote,
+      promoteIdea: promoteRemote,
+      decideAcceptance: decideRemote,
+    },
+  } as never)
 
   const parent = ctx.plugin({
     apply(parentCtx: Context) {
@@ -55,7 +70,7 @@ async function bench() {
   await parent.await()
   const fiber = ctx.plugin({ apply })
   await fiber.await()
-  return { ctx, fiber, parent, snapshotRemote, taskRemote }
+  return { ctx, fiber, parent, snapshotRemote, taskRemote, promoteRemote, decideRemote }
 }
 
 function injectedFace(ctx: Context, actions: { open: () => void; close: () => void; selectTask: (taskId: string | null) => void }): WorkConsoleInjected {
@@ -131,6 +146,51 @@ describe('ui-work-console client apply', () => {
     face.clearError()
     face.closeConsole()
     expect(actions.close).toHaveBeenCalledOnce()
+  })
+
+  it('wires Idea promotion through the unified Work Console Remote', async () => {
+    const { ctx, promoteRemote, snapshotRemote } = await bench()
+    const actions = { open: vi.fn(), close: vi.fn(), selectTask: vi.fn() }
+    const face = injectedFace(ctx, actions)
+    await expect(face.promoteIdea('idea-1', 1)).resolves.toBe(true)
+    expect(promoteRemote).toHaveBeenCalledWith({ id: 'idea-1', revision: 1 })
+    expect(snapshotRemote).toHaveBeenCalledOnce()
+  })
+
+  it('keeps acceptance detail open while another human gate remains and closes terminal decisions', async () => {
+    const first = await bench()
+    first.decideRemote.mockResolvedValueOnce({
+      ok: true,
+      value: { ok: true, value: { taskId: 'task-p0', revision: 2, status: 'validation', decision: 'accept' } },
+    })
+    const firstActions = { open: vi.fn(), close: vi.fn(), selectTask: vi.fn() }
+    const firstFace = injectedFace(first.ctx, firstActions)
+    await expect(firstFace.decideAcceptance('task-p0', 1, 2, 1, 'accept')).resolves.toBe(true)
+    expect(first.taskRemote).toHaveBeenCalledWith('task-p0')
+    expect(firstActions.selectTask).not.toHaveBeenCalled()
+
+    const second = await bench()
+    const secondActions = { open: vi.fn(), close: vi.fn(), selectTask: vi.fn() }
+    const secondFace = injectedFace(second.ctx, secondActions)
+    await expect(secondFace.decideAcceptance('task-p0', 1, 2, 1, 'return')).resolves.toBe(true)
+    expect(secondActions.selectTask).toHaveBeenCalledWith(null)
+  })
+
+  it('does not mutate local selection when Host mutation commands fail', async () => {
+    const { ctx, promoteRemote, decideRemote } = await bench()
+    promoteRemote.mockResolvedValueOnce({
+      ok: true,
+      value: { ok: false, error: { code: 'conflict', id: 'idea-1', expectedRevision: 1, currentRevision: 2 } },
+    })
+    decideRemote.mockResolvedValueOnce({
+      ok: true,
+      value: { ok: false, error: { code: 'not-ready', taskId: 'task-p0', reason: 'automated-pending' } },
+    })
+    const actions = { open: vi.fn(), close: vi.fn(), selectTask: vi.fn() }
+    const face = injectedFace(ctx, actions)
+    await expect(face.promoteIdea('idea-1', 1)).resolves.toBe(false)
+    await expect(face.decideAcceptance('task-p0', 1, 2, 1, 'accept')).resolves.toBe(false)
+    expect(actions.selectTask).not.toHaveBeenCalled()
   })
 
   it('stops synchronization after a failed snapshot refresh', async () => {

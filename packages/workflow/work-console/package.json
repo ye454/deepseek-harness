@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-work-console",
-  "description": "Read-only global continuous-work dashboard projection and Typert Remote",
+  "description": "Global continuous-work dashboard projection plus explicit command subplugin wiring",
   "version": "0.1.0-rc.5",
   "private": true,
   "type": "module",
@@ -31,6 +31,7 @@
     "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/dsh-typert-protocol": "workspace:^",
+    "@deepseek-ai/dsh-work-console-commands": "workspace:^",
     "@deepseek-ai/dsh-work-control": "workspace:^",
     "@deepseek-ai/dsh-work-environment": "workspace:^",
     "@deepseek-ai/dsh-work-execution": "workspace:^",
@@ -44,6 +45,7 @@
     "@deepseek-ai/dsh-storage": "workspace:^",
     "@deepseek-ai/dsh-storage-domain": "workspace:^",
     "@deepseek-ai/dsh-typert-protocol": "workspace:^",
+    "@deepseek-ai/dsh-work-console-commands": "workspace:^",
     "@deepseek-ai/dsh-work-control": "workspace:^",
     "@deepseek-ai/dsh-work-environment": "workspace:^",
     "@deepseek-ai/dsh-work-execution": "workspace:^",

@@ -22,7 +22,6 @@ import {
   subprocessRunHandle,
   type SubagentResult,
   type SubagentRun,
-  type SubagentStartRequest,
   type SubagentStopReason,
 } from '@deepseek-ai/dsh-subagent'
 import {
@@ -38,11 +37,19 @@ import {
 /** Default POSIX grace between subprocess termination tiers. */
 export const DEFAULT_DISPOSE_GRACE_MS = 3_000
 
+/** Minimal execution input shared by the Subagent provider and remote WorkNode adapters. */
+export interface ClaudeCodeRunRequest {
+  /** Text-only user task delivered to the official Agent SDK query. */
+  readonly prompt: readonly ContentBlock[]
+  /** Canonical cancellation channel for startup and the published run. */
+  readonly signal: AbortSignal
+}
+
 /* jscpd:ignore-start -- sibling providers intentionally keep product-private
  * run inputs and error normalization instead of adding a shared lifecycle owner. */
 /** Fully resolved inputs for one official Claude Agent SDK query. */
 export interface ClaudeCodeRunSpec {
-  /** Parent Session workspace supplied to the SDK and real CLI. */
+  /** Workspace supplied to the SDK and real CLI. */
   readonly cwd: string
   /** Exact native Claude Code executable resolved from the host PATH. */
   readonly executable: string
@@ -64,7 +71,7 @@ function thrown(value: unknown): Error {
 
 /**
  * Validate and preserve the one-shot task before crossing the SDK boundary.
- * @param prompt - task content accepted from the shared subagent service.
+ * @param prompt - task content accepted from the shared subagent service or WorkNode daemon.
  * @returns the exact text sequence as one SDK prompt.
  */
 export function textTask(prompt: readonly ContentBlock[]): string {
@@ -196,12 +203,14 @@ export function claudeQueryOptions(
 
 /**
  * Start one official Claude Agent SDK query and publish its one-shot run.
- * @param request - resolved shared subagent request.
+ * The runtime depends only on prompt/cancellation plus the resolved execution spec;
+ * parent Agent/session concerns remain in the Subagent adapter.
+ * @param request - text task and cancellation channel.
  * @param spec - Workspace, environment, process service, and diagnostic policy.
  * @returns the published run after both Query and real CLI handle exist.
  */
 export async function startClaudeCodeRun(
-  request: SubagentStartRequest,
+  request: ClaudeCodeRunRequest,
   spec: ClaudeCodeRunSpec,
 ): Promise<SubagentRun> {
   const prompt = textTask(request.prompt)

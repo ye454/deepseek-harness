@@ -280,6 +280,8 @@ export class WorkControlService extends Service {
 
   /**
    * Change execution status. Entering `done` is refused until every required validator has passed.
+   * Returning from validation to running resets the compact validation projection so evidence from the
+   * previous cycle cannot be reused after implementation or environment changes.
    * @param expected - Exact task revision.
    * @param status - Requested next status.
    * @returns the updated task.
@@ -290,6 +292,13 @@ export class WorkControlService extends Service {
         throw new WorkItemTransitionError(`task '${expected.id}' cannot move from ${current.status} to ${status}`)
       }
       if (status === 'done') assertRequiredValidationPassed(current)
+      if (current.status === 'validation' && status === 'running') {
+        return {
+          ...current,
+          status,
+          validation: initialValidation(current.validationPolicy?.validators ?? []),
+        }
+      }
       return { ...current, status }
     })
   }

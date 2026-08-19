@@ -66,6 +66,7 @@ export type ValidatorKind =
   | 'device-test'
   | 'static-check'
   | 'artifact-check'
+  | 'smoke-test'
   | 'user-acceptance'
 
 /** Whether one validator gates completion or only contributes evidence. */

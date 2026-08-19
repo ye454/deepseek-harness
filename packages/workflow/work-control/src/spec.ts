@@ -17,7 +17,7 @@ const stageKind = z.enum([
 ])
 const validatorKind = z.enum([
   'automated-test', 'visual-model', 'runtime-check', 'log-check', 'benchmark',
-  'device-test', 'static-check', 'artifact-check', 'user-acceptance',
+  'device-test', 'static-check', 'artifact-check', 'smoke-test', 'user-acceptance',
 ])
 const validatorRequirement = z.enum(['required', 'advisory', 'optional'])
 

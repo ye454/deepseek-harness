@@ -12,7 +12,6 @@ import type {
   WorkConsoleSnapshot,
   WorkConsoleTaskDetail,
 } from '@deepseek-ai/dsh-api-remotes/client'
-// Type-only: pulls generated ctx.remote Work Console namespaces into this program.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 
 /** Immutable business snapshot consumed through the framework-generated `useWorkConsole` hook. */
@@ -105,9 +104,9 @@ export class WorkConsoleController {
   async promoteIdea(request: PromoteWorkConsoleIdeaRequest): Promise<PromotedWorkConsoleTask | undefined> {
     this.publish({ ...this.state, error: undefined })
     try {
-      const transport = await this.ctx.remote.workConsoleCommands.promoteIdea(request)
+      const transport = await this.ctx.remote.workConsole.promoteIdea(request)
       if (!transport.ok) {
-        this.publish({ ...this.state, error: `workConsoleCommands.promoteIdea: ${transport.error.code}: ${transport.error.message}` })
+        this.publish({ ...this.state, error: `workConsole.promoteIdea: ${transport.error.code}: ${transport.error.message}` })
         return undefined
       }
       if (!transport.value.ok) {
@@ -128,9 +127,9 @@ export class WorkConsoleController {
   ): Promise<WorkConsoleAcceptanceDecisionValue | undefined> {
     this.publish({ ...this.state, error: undefined })
     try {
-      const transport = await this.ctx.remote.workConsoleCommands.decideAcceptance(request)
+      const transport = await this.ctx.remote.workConsole.decideAcceptance(request)
       if (!transport.ok) {
-        this.publish({ ...this.state, error: `workConsoleCommands.decideAcceptance: ${transport.error.code}: ${transport.error.message}` })
+        this.publish({ ...this.state, error: `workConsole.decideAcceptance: ${transport.error.code}: ${transport.error.message}` })
         return undefined
       }
       if (!transport.value.ok) {

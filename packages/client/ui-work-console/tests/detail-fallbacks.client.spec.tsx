@@ -58,6 +58,8 @@ function props(): WorkConsoleRootProps {
     closeConsole: vi.fn(),
     refreshConsole: vi.fn(),
     selectTask: vi.fn(),
+    promoteIdea: vi.fn().mockResolvedValue(true),
+    decideAcceptance: vi.fn().mockResolvedValue(true),
     clearError: vi.fn(),
   }
 }

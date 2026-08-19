@@ -4,14 +4,16 @@ Date: 2026-08-18
 
 ## Decision
 
-Human actions from the global Work Console use a dedicated Host mutation service rather than letting browser code call Work Control or Work Validation directly.
+Human actions from the global Work Console use the existing Host `@deepseek-ai/dsh-work-console` / `ctx.workConsole` boundary rather than letting browser code call Work Control or Work Validation directly.
 
-The service is `@deepseek-ai/dsh-work-console-commands` / `ctx.workConsoleCommands` and initially exposes two explicit operations:
+The same Typert namespace owns compact reads and two explicit human commands:
 
 - passive Idea -> promoted `organizing` Task;
 - required human acceptance -> accept or return-to-execution.
 
-The command package owns no durable table. Work Control and Work Validation remain the mutation authorities and their revisions/generations remain the concurrency tokens.
+Command logic lives in a separate Host helper module inside the package, but there is intentionally no second `work-console-commands` workspace package, Cordis service, Web row, or Remote namespace. This keeps the lightweight product from paying an extra package/loader/lockfile/Remote-mount cost for two closely coupled human operations.
+
+Work Control and Work Validation remain the mutation authorities and their revisions/generations remain the concurrency tokens. Work Console owns no durable table.
 
 ## Why not `ctx.approval`
 
@@ -49,7 +51,7 @@ After the human result commits, automated readiness is checked again before the 
 
 ## Failure semantics
 
-Missing, stale, invalid-state, invalid-validator, stale-generation, and automated-not-ready conditions are typed business failures. Unexpected storage/runtime failures still throw; the command layer does not convert infrastructure failure into a successful human decision.
+Missing, stale, invalid-state, invalid-validator, stale-generation, and automated-not-ready conditions are typed business failures. Unexpected storage/runtime failures still throw; the command boundary does not convert infrastructure failure into a successful human decision.
 
 ## Model/token effect
 

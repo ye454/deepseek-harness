@@ -7,15 +7,23 @@ import dynamicRemote from '@deepseek-ai/dsh-cordis-host-runner/remote'
 import pluginInventoryRemote from '@deepseek-ai/dsh-host-plugin-inventory/remote'
 import messageFeedbackRemote from '@deepseek-ai/dsh-message-feedback/remote'
 import workConsoleRemote from '@deepseek-ai/dsh-work-console/remote'
-import workConsoleCommandsRemote from '@deepseek-ai/dsh-work-console-commands/remote'
 import type { TypertClientRemote } from '@deepseek-ai/dsh-typert-protocol'
 
 export type { TypertClientRemote as ClientRemote } from '@deepseek-ai/dsh-typert-protocol'
 export type { PluginInventorySnapshot } from '@deepseek-ai/dsh-host-plugin-inventory/types'
 export type {
+  DecideWorkConsoleAcceptanceRequest,
+  DecideWorkConsoleAcceptanceResult,
+  PromoteWorkConsoleIdeaRequest,
+  PromoteWorkConsoleIdeaResult,
+  PromotedWorkConsoleTask,
+  WorkConsoleAcceptanceDecisionValue,
   WorkConsoleAcceptanceState,
   WorkConsoleAttemptView,
   WorkConsoleBoardStatus,
+  WorkConsoleCommandFailure,
+  WorkConsoleCommandRejected,
+  WorkConsoleCommandSuccess,
   WorkConsoleEnvironmentDetail,
   WorkConsoleEnvironmentSummary,
   WorkConsoleExecutionView,
@@ -33,23 +41,11 @@ export type {
   WorkConsoleValidationView,
   WorkConsoleValidatorDetail,
 } from '@deepseek-ai/dsh-work-console/types'
-export type {
-  DecideWorkConsoleAcceptanceRequest,
-  DecideWorkConsoleAcceptanceResult,
-  PromoteWorkConsoleIdeaRequest,
-  PromoteWorkConsoleIdeaResult,
-  PromotedWorkConsoleTask,
-  WorkConsoleAcceptanceDecisionValue,
-  WorkConsoleCommandFailure,
-  WorkConsoleCommandRejected,
-  WorkConsoleCommandSuccess,
-} from '@deepseek-ai/dsh-work-console-commands/types'
 export type {} from '@deepseek-ai/dsh-commands/remote'
 export type {} from '@deepseek-ai/dsh-goal/remote'
 export type {} from '@deepseek-ai/dsh-host-plugin-inventory/remote'
 export type {} from '@deepseek-ai/dsh-message-feedback/remote'
 export type {} from '@deepseek-ai/dsh-work-console/remote'
-export type {} from '@deepseek-ai/dsh-work-console-commands/remote'
 // The forwarded-event allowlist's selection seat: without it in the consumer's
 // compilation face `TypertRemoteEvent` is `never` and every `$on` call fails.
 export type { ApiRemoteForwardedEvent } from '../types.ts'
@@ -148,7 +144,6 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
       pluginInventoryRemote,
       messageFeedbackRemote,
       workConsoleRemote,
-      workConsoleCommandsRemote,
     ]) {
       disposers.push(await ctx.remote.$mount(contribution))
     }
@@ -156,8 +151,6 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
     for (const dispose of disposers.reverse()) await dispose()
     throw error
   }
-  // Unwound in reverse mount order, so a namespace never outlives one mounted
-  // after it.
   return async () => {
     for (const dispose of disposers.reverse()) await dispose()
   }

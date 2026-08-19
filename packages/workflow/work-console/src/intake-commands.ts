@@ -10,10 +10,9 @@ import type {
   CreateWorkConsoleIdeaResult,
   OrganizeWorkConsoleTaskRequest,
   OrganizeWorkConsoleTaskResult,
-  WorkConsoleTaskType,
 } from './intake-types.ts'
 import { organizationTemplate } from './organization-templates.ts'
-import type { WorkConsoleCommandRejected, WorkConsoleCommandSuccess } from './types.ts'
+import type { WorkConsoleCommandSuccess } from './types.ts'
 
 /** Capture one passive Idea without creating execution state. */
 export async function createWorkConsoleIdea(
@@ -22,7 +21,7 @@ export async function createWorkConsoleIdea(
 ): Promise<CreateWorkConsoleIdeaResult> {
   const title = request.title.trim()
   if (title.length === 0) {
-    return rejected({ code: 'invalid-input', field: 'title', reason: 'title must not be empty' })
+    return { ok: false, error: { code: 'invalid-input', field: 'title', reason: 'title must not be empty' } }
   }
   const idea = await ctx.workControl.createIdea({
     title,
@@ -39,21 +38,27 @@ export async function organizeWorkConsoleTask(
 ): Promise<OrganizeWorkConsoleTaskResult> {
   const taskId = WorkItemId(request.taskId)
   const current = ctx.workControl.get(taskId)
-  if (current === undefined) return rejected({ code: 'not-found', id: request.taskId })
+  if (current === undefined) return { ok: false, error: { code: 'not-found', id: request.taskId } }
   if (current.revision !== request.taskRevision) {
-    return rejected({
-      code: 'conflict',
-      id: request.taskId,
-      expectedRevision: request.taskRevision,
-      currentRevision: current.revision,
-    })
+    return {
+      ok: false,
+      error: {
+        code: 'conflict',
+        id: request.taskId,
+        expectedRevision: request.taskRevision,
+        currentRevision: current.revision,
+      },
+    }
   }
   if (current.kind !== 'task' || current.status !== 'organizing') {
-    return rejected({
-      code: 'invalid-state',
-      id: request.taskId,
-      reason: current.kind === 'idea' ? 'work item is still a passive idea' : `task status is ${current.status}`,
-    })
+    return {
+      ok: false,
+      error: {
+        code: 'invalid-state',
+        id: request.taskId,
+        reason: current.kind === 'idea' ? 'work item is still a passive idea' : `task status is ${current.status}`,
+      },
+    }
   }
 
   try {
@@ -61,24 +66,30 @@ export async function organizeWorkConsoleTask(
       { id: current.id, revision: current.revision },
       organizationTemplate(request.taskType),
     )
+    if (organized.currentStageId === undefined) {
+      throw new Error(`organized task '${organized.id}' has no current stage`)
+    }
     return success({
       taskId: String(organized.id),
       revision: organized.revision,
       status: 'running',
-      taskType: organized.taskType as WorkConsoleTaskType,
-      stageId: organized.currentStageId!,
+      taskType: request.taskType,
+      stageId: organized.currentStageId,
     })
   } catch (error) {
     if (error instanceof WorkItemConflictError) {
-      return rejected({
-        code: 'conflict',
-        id: request.taskId,
-        expectedRevision: request.taskRevision,
-        currentRevision: error.actualRevision,
-      })
+      return {
+        ok: false,
+        error: {
+          code: 'conflict',
+          id: request.taskId,
+          expectedRevision: request.taskRevision,
+          currentRevision: error.actualRevision,
+        },
+      }
     }
     if (error instanceof WorkItemTransitionError) {
-      return rejected({ code: 'invalid-state', id: request.taskId, reason: error.message })
+      return { ok: false, error: { code: 'invalid-state', id: request.taskId, reason: error.message } }
     }
     throw error
   }
@@ -86,8 +97,4 @@ export async function organizeWorkConsoleTask(
 
 function success<T>(value: T): WorkConsoleCommandSuccess<T> {
   return { ok: true, value }
-}
-
-function rejected<E>(error: E): WorkConsoleCommandRejected<E & { readonly code: string }> {
-  return { ok: false, error: error as E & { readonly code: string } }
 }

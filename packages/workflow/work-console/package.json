@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-work-console",
-  "description": "Global continuous-work dashboard projection plus explicit command subplugin wiring",
+  "description": "Global continuous-work dashboard projection and explicit Host-owned mutation commands",
   "version": "0.1.0-rc.5",
   "private": true,
   "type": "module",
@@ -29,9 +29,9 @@
   "dependencies": { "zod": "^4.4.3" },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/dsh-anonymous-user-id": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/dsh-typert-protocol": "workspace:^",
-    "@deepseek-ai/dsh-work-console-commands": "workspace:^",
     "@deepseek-ai/dsh-work-control": "workspace:^",
     "@deepseek-ai/dsh-work-environment": "workspace:^",
     "@deepseek-ai/dsh-work-execution": "workspace:^",
@@ -40,12 +40,12 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/dsh-anonymous-user-id": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/dsh-session": "workspace:^",
     "@deepseek-ai/dsh-storage": "workspace:^",
     "@deepseek-ai/dsh-storage-domain": "workspace:^",
     "@deepseek-ai/dsh-typert-protocol": "workspace:^",
-    "@deepseek-ai/dsh-work-console-commands": "workspace:^",
     "@deepseek-ai/dsh-work-control": "workspace:^",
     "@deepseek-ai/dsh-work-environment": "workspace:^",
     "@deepseek-ai/dsh-work-execution": "workspace:^",

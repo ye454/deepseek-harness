@@ -34,8 +34,6 @@ function harness(options: {
     workConsole: {
       snapshot: snapshotRemote,
       task: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
-    },
-    workConsoleCommands: {
       promoteIdea: promoteRemote,
       decideAcceptance: decideRemote,
     },

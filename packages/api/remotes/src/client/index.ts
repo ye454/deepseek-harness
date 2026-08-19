@@ -12,9 +12,18 @@ import type { TypertClientRemote } from '@deepseek-ai/dsh-typert-protocol'
 export type { TypertClientRemote as ClientRemote } from '@deepseek-ai/dsh-typert-protocol'
 export type { PluginInventorySnapshot } from '@deepseek-ai/dsh-host-plugin-inventory/types'
 export type {
+  DecideWorkConsoleAcceptanceRequest,
+  DecideWorkConsoleAcceptanceResult,
+  PromoteWorkConsoleIdeaRequest,
+  PromoteWorkConsoleIdeaResult,
+  PromotedWorkConsoleTask,
+  WorkConsoleAcceptanceDecisionValue,
   WorkConsoleAcceptanceState,
   WorkConsoleAttemptView,
   WorkConsoleBoardStatus,
+  WorkConsoleCommandFailure,
+  WorkConsoleCommandRejected,
+  WorkConsoleCommandSuccess,
   WorkConsoleEnvironmentDetail,
   WorkConsoleEnvironmentSummary,
   WorkConsoleExecutionView,
@@ -129,7 +138,12 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
   const disposers: Array<() => Promise<void>> = []
   try {
     for (const contribution of [
-      commandsRemote, goalsRemote, dynamicRemote, pluginInventoryRemote, messageFeedbackRemote, workConsoleRemote,
+      commandsRemote,
+      goalsRemote,
+      dynamicRemote,
+      pluginInventoryRemote,
+      messageFeedbackRemote,
+      workConsoleRemote,
     ]) {
       disposers.push(await ctx.remote.$mount(contribution))
     }
@@ -137,8 +151,6 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
     for (const dispose of disposers.reverse()) await dispose()
     throw error
   }
-  // Unwound in reverse mount order, so a namespace never outlives one mounted
-  // after it.
   return async () => {
     for (const dispose of disposers.reverse()) await dispose()
   }

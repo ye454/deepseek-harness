@@ -1,6 +1,7 @@
 /**
- * Read-only global continuous-work console projection. The service derives every response from the
- * current Work Control / Execution / Node / Environment / Validation authorities and owns no cache.
+ * Global continuous-work console projection and explicit Host-owned mutation boundary.
+ * The service derives reads from Work Control / Execution / Node / Environment / Validation authorities
+ * and writes only through Work Control / Validation commands; it owns no parallel business store.
  * @module @deepseek-ai/dsh-work-console
  */
 
@@ -12,7 +13,12 @@ import type { WorkEnvironment } from '@deepseek-ai/dsh-work-environment'
 import type { WorkValidatorResult } from '@deepseek-ai/dsh-work-validation'
 // Typert-generated ./typert and ./remote artifacts import Zod at runtime.
 import type {} from 'zod'
+import { decideWorkConsoleAcceptance, promoteWorkConsoleIdea } from './commands.ts'
 import type {
+  DecideWorkConsoleAcceptanceRequest,
+  DecideWorkConsoleAcceptanceResult,
+  PromoteWorkConsoleIdeaRequest,
+  PromoteWorkConsoleIdeaResult,
   WorkConsoleAcceptanceState,
   WorkConsoleAttemptView,
   WorkConsoleBoardStatus,
@@ -33,12 +39,24 @@ import type {
 
 export type * from './types.ts'
 
-/** Read-only Host Remote used by the browser work-console surface. */
+/** Host Remote used by the browser work-console surface. */
 export class WorkConsoleGateway extends TypertRemoteService {
   static inject = ['workControl', 'workExecution', 'workNodes', 'workEnvironments', 'workValidation']
 
   constructor(ctx: Context) {
     super(ctx, 'workConsole')
+  }
+
+  /** Explicitly move a passive Idea into organizing; never starts a model/Runner/Environment. */
+  @Remote('promoteIdea')
+  promoteIdea(request: PromoteWorkConsoleIdeaRequest): Promise<PromoteWorkConsoleIdeaResult> {
+    return promoteWorkConsoleIdea(this.ctx, request)
+  }
+
+  /** Record one Host-owned human acceptance/return decision after automated gates are satisfied. */
+  @Remote('decideAcceptance')
+  decideAcceptance(request: DecideWorkConsoleAcceptanceRequest): Promise<DecideWorkConsoleAcceptanceResult> {
+    return decideWorkConsoleAcceptance(this.ctx, request)
   }
 
   /**

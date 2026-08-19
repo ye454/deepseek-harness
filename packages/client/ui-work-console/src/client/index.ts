@@ -1,9 +1,9 @@
 /**
- * Global Work Console browser plugin: one sidebar action plus a frame-wide read-only overlay.
+ * Global Work Console browser plugin: one sidebar action plus a frame-wide global work surface.
  * It neither replaces the conversation slot nor owns Host work state.
  */
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-// Type-only: pulls ctx.remote.workConsole into this program.
+// Type-only: pulls generated Work Console Remote namespace into this program.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 // Type-only: declares the target slot contracts used by this contribution.
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
@@ -21,12 +21,12 @@ export type {
   WorkConsoleTriggerProps,
 } from './contract.ts'
 
-/** Required services. The specific Remote namespace prevents activation before the Host contribution is mounted. */
+/** Required services. The specific namespace prevents activation before the Host Work Console is mounted. */
 export const inject = ['slots', 'remote', 'remote.workConsole']
 
 /**
  * Register the project-independent Work Console entry and overlay.
- * @param ctx - browser root context carrying slots and generated Remote namespaces.
+ * @param ctx - browser root context carrying slots and generated Remote namespace.
  */
 export function apply(ctx: ClientContext): void {
   const store = createWorkConsoleStore()
@@ -56,6 +56,21 @@ export function apply(ctx: ClientContext): void {
     selectTask: taskId => {
       actions.selectTask(taskId)
       void controller.loadTask(taskId)
+    },
+    promoteIdea: async (id, revision) =>
+      (await controller.promoteIdea({ id, revision })) !== undefined,
+    decideAcceptance: async (taskId, taskRevision, generation, validatorIndex, decision) => {
+      const value = await controller.decideAcceptance({
+        taskId,
+        taskRevision,
+        generation,
+        validatorIndex,
+        decision,
+      })
+      if (value === undefined) return false
+      if (value.status === 'validation') await controller.loadTask(taskId)
+      else actions.selectTask(null)
+      return true
     },
     clearError: () => { controller.clearError() },
   })

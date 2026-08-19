@@ -19,6 +19,16 @@ export type WorkConsoleInjected = {
   closeConsole: () => void
   refreshConsole: (selectedTaskId: string | null) => void
   selectTask: (taskId: string) => void
+  /** Explicit Idea -> organizing Task transition; returns whether the Host committed it. */
+  promoteIdea: (id: string, revision: number) => Promise<boolean>
+  /** Explicit human decision after the user has inspected Task Detail/Evidence. */
+  decideAcceptance: (
+    taskId: string,
+    taskRevision: number,
+    generation: number,
+    validatorIndex: number,
+    decision: 'accept' | 'return',
+  ) => Promise<boolean>
   clearError: () => void
 }
 

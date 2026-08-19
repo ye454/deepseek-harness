@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { DragEvent, ReactNode } from 'react'
 import type {
   WorkConsoleIdeaCard,
   WorkConsoleSnapshot,
   WorkConsoleTaskCard,
   WorkConsoleTaskDetail,
+  WorkConsoleValidatorDetail,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { WorkConsoleRootProps, WorkConsoleTriggerProps } from './contract.ts'
 import css from './WorkConsoleRoot.module.css'
 
 const POLL_MS = 5_000
+const IDEA_DRAG_TYPE = 'application/x-dsh-work-idea'
 
 /** Sidebar entry opening the global, project-independent Work Console. */
 export function WorkConsoleTrigger({ wide, useStore, openConsole, closeConsole }: WorkConsoleTriggerProps) {
@@ -38,6 +40,8 @@ export function WorkConsoleRoot({
   closeConsole,
   refreshConsole,
   selectTask,
+  promoteIdea,
+  decideAcceptance,
   clearError,
 }: WorkConsoleRootProps) {
   const open = useStore(state => state.open)
@@ -45,6 +49,7 @@ export function WorkConsoleRoot({
   const remote = useWorkConsole(state => state)
   const [query, setQuery] = useState('')
   const [priority, setPriority] = useState<'all' | 'p0' | 'p1' | 'p2'>('all')
+  const [busyKey, setBusyKey] = useState<string | undefined>()
 
   useEffect(() => {
     if (!open) return undefined
@@ -72,6 +77,38 @@ export function WorkConsoleRoot({
 
   const detail = remote.detailTaskId === selectedTaskId ? remote.detail : undefined
 
+  const runPromotion = async (idea: Pick<WorkConsoleIdeaCard, 'id' | 'revision'>): Promise<void> => {
+    const key = `idea:${idea.id}`
+    if (busyKey !== undefined) return
+    setBusyKey(key)
+    try {
+      await promoteIdea(idea.id, idea.revision)
+    } finally {
+      setBusyKey(undefined)
+    }
+  }
+
+  const runDecision = async (
+    detailValue: WorkConsoleTaskDetail,
+    validator: WorkConsoleValidatorDetail,
+    decision: 'accept' | 'return',
+  ): Promise<void> => {
+    if (detailValue.validationGeneration === undefined || busyKey !== undefined) return
+    const key = `accept:${detailValue.card.id}`
+    setBusyKey(key)
+    try {
+      await decideAcceptance(
+        detailValue.card.id,
+        detailValue.card.revision,
+        detailValue.validationGeneration,
+        validator.index,
+        decision,
+      )
+    } finally {
+      setBusyKey(undefined)
+    }
+  }
+
   return (
     <div className={css.overlay} role="dialog" aria-modal="true" aria-label="持续工作控制台">
       <div className={css.surface}>
@@ -79,7 +116,7 @@ export function WorkConsoleRoot({
           <div>
             <div className={css.titleRow}>
               <h1 className={css.title}>持续工作控制台</h1>
-              <span className={css.readOnly}>只读 V1</span>
+              <span className={css.readOnly}>V1</span>
             </div>
             <p className={css.subtitle}>想法沉淀 → 持续执行 → AI 验收后人工确认</p>
           </div>
@@ -120,17 +157,18 @@ export function WorkConsoleRoot({
         </div>
 
         <main className={css.workspace}>
-          <IdeaSection ideas={ideas} />
+          <IdeaSection ideas={ideas} busyKey={busyKey} onPromote={runPromotion} />
           <TaskSection
             title="执行区"
-            hint="系统持续组织、执行、自动验证"
+            hint="拖入成熟想法；系统持续组织、执行、自动验证"
             tasks={execution}
             empty="当前没有执行中的 Task"
             onSelect={selectTask}
+            onIdeaDrop={runPromotion}
           />
           <TaskSection
             title="验收区"
-            hint="自动验收已满足，等待人工决定"
+            hint="自动验收已满足；打开证据后人工决定"
             tasks={acceptance}
             empty="当前没有等待人工验收的 Task"
             acceptance
@@ -142,6 +180,8 @@ export function WorkConsoleRoot({
           <TaskDetailDrawer
             detail={detail}
             loading={remote.detailLoading && remote.detailTaskId === selectedTaskId}
+            busy={busyKey === `accept:${selectedTaskId}`}
+            onDecision={runDecision}
             onClose={() => { actions.selectTask(null) }}
           />
         )}
@@ -190,40 +230,69 @@ function ResourceFact({ label, value, state, warning }: {
   )
 }
 
-function IdeaSection({ ideas }: { readonly ideas: readonly WorkConsoleIdeaCard[] }) {
+function IdeaSection({ ideas, busyKey, onPromote }: {
+  readonly ideas: readonly WorkConsoleIdeaCard[]
+  readonly busyKey: string | undefined
+  readonly onPromote: (idea: Pick<WorkConsoleIdeaCard, 'id' | 'revision'>) => Promise<void>
+}) {
   return (
     <section className={`${css.zone} ${css.ideaZone}`} aria-label="想法区">
       <ZoneHeader title="想法区" count={ideas.length} hint="只记录，不自动执行" />
       <div className={css.zoneBody}>
         {ideas.length === 0 && <div className={css.empty}>暂无想法</div>}
-        {ideas.map(idea => (
-          <article key={idea.id} className={css.ideaCard}>
-            <strong>{idea.title}</strong>
-            {idea.summary !== '' && <p>{idea.summary}</p>}
-            {idea.tags.length > 0 && <div className={css.tags}>{idea.tags.map(tag => <span key={tag}>{tag}</span>)}</div>}
-          </article>
-        ))}
+        {ideas.map(idea => {
+          const busy = busyKey === `idea:${idea.id}`
+          return (
+            <article
+              key={idea.id}
+              className={css.ideaCard}
+              draggable={!busy}
+              onDragStart={event => {
+                event.dataTransfer.effectAllowed = 'move'
+                event.dataTransfer.setData(IDEA_DRAG_TYPE, JSON.stringify({ id: idea.id, revision: idea.revision }))
+              }}
+            >
+              <strong>{idea.title}</strong>
+              {idea.summary !== '' && <p>{idea.summary}</p>}
+              {idea.tags.length > 0 && <div className={css.tags}>{idea.tags.map(tag => <span key={tag}>{tag}</span>)}</div>}
+              <div className={css.ideaActions}>
+                <span>拖入执行区</span>
+                <button type="button" disabled={busyKey !== undefined} onClick={() => { void onPromote(idea) }}>
+                  {busy ? '推进中…' : '推进到执行'}
+                </button>
+              </div>
+            </article>
+          )
+        })}
       </div>
       <div className={css.zoneFoot}>成熟后由用户明确推进到执行区</div>
     </section>
   )
 }
 
-function TaskSection({ title, hint, tasks, empty, acceptance = false, onSelect }: {
+function TaskSection({ title, hint, tasks, empty, acceptance = false, onSelect, onIdeaDrop }: {
   readonly title: string
   readonly hint: string
   readonly tasks: readonly WorkConsoleTaskCard[]
   readonly empty: string
   readonly acceptance?: boolean
   readonly onSelect: (taskId: string) => void
+  readonly onIdeaDrop?: (idea: { readonly id: string; readonly revision: number }) => Promise<void>
 }) {
+  const acceptsIdeas = onIdeaDrop !== undefined
   return (
-    <section className={`${css.zone} ${acceptance ? css.acceptanceZone : css.executionZone}`} aria-label={title}>
+    <section
+      className={`${css.zone} ${acceptance ? css.acceptanceZone : css.executionZone}`}
+      aria-label={title}
+      onDragOver={acceptsIdeas ? event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move' } : undefined}
+      onDrop={acceptsIdeas ? event => { void handleIdeaDrop(event, onIdeaDrop) } : undefined}
+    >
       <ZoneHeader title={title} count={tasks.length} hint={hint} />
       <div className={css.zoneBody}>
         {tasks.length === 0 && <div className={css.empty}>{empty}</div>}
         {tasks.map(task => <TaskCard key={task.id} task={task} acceptance={acceptance} onSelect={onSelect} />)}
       </div>
+      {acceptsIdeas && <div className={css.zoneFoot}>将想法拖到这里，或使用“推进到执行”</div>}
     </section>
   )
 }
@@ -258,7 +327,7 @@ function TaskCard({ task, acceptance, onSelect }: {
       </div>
       <div className={css.cardBottom}>
         {acceptance ? (
-          <span className={css.validationPassed}>AI/自动验证已满足 · 人工门禁 {task.validation?.pendingUserAcceptance ?? 0}</span>
+          <span className={css.validationPassed}>自动验证已满足 · 点击查看证据</span>
         ) : (
           <span>{task.execution.runningThreadCount > 0 ? `${task.execution.runningThreadCount} Runner 运行中` : `${task.execution.threadCount} Thread`}</span>
         )}
@@ -278,9 +347,15 @@ function Fact({ label, value, warning = false }: { readonly label: string; reado
   return <span className={`${css.fact} ${warning ? css.factWarning : ''}`}><small>{label}</small>{value}</span>
 }
 
-function TaskDetailDrawer({ detail, loading, onClose }: {
+function TaskDetailDrawer({ detail, loading, busy, onDecision, onClose }: {
   readonly detail: WorkConsoleTaskDetail | undefined
   readonly loading: boolean
+  readonly busy: boolean
+  readonly onDecision: (
+    detail: WorkConsoleTaskDetail,
+    validator: WorkConsoleValidatorDetail,
+    decision: 'accept' | 'return',
+  ) => Promise<void>
   readonly onClose: () => void
 }) {
   return (
@@ -289,14 +364,23 @@ function TaskDetailDrawer({ detail, loading, onClose }: {
         <button type="button" className={css.drawerClose} aria-label="关闭 Task Detail" onClick={onClose}>×</button>
         {detail === undefined ? (
           <div className={css.detailEmpty}>{loading ? '正在读取 Task Detail…' : 'Task Detail 暂不可用'}</div>
-        ) : <TaskDetail detail={detail} />}
+        ) : <TaskDetail detail={detail} busy={busy} onDecision={onDecision} />}
       </aside>
     </div>
   )
 }
 
-function TaskDetail({ detail }: { readonly detail: WorkConsoleTaskDetail }) {
+function TaskDetail({ detail, busy, onDecision }: {
+  readonly detail: WorkConsoleTaskDetail
+  readonly busy: boolean
+  readonly onDecision: (
+    detail: WorkConsoleTaskDetail,
+    validator: WorkConsoleValidatorDetail,
+    decision: 'accept' | 'return',
+  ) => Promise<void>
+}) {
   const { card } = detail
+  const actionable = actionableUserValidator(detail)
   return (
     <>
       <div className={css.detailHeader}>
@@ -304,6 +388,24 @@ function TaskDetail({ detail }: { readonly detail: WorkConsoleTaskDetail }) {
         <h2>{card.title}</h2>
         {card.summary !== '' && <p>{card.summary}</p>}
       </div>
+
+      {actionable !== undefined && detail.validationGeneration !== undefined && (
+        <div className={css.acceptanceActions}>
+          <div>
+            <strong>人工验收</strong>
+            <span>先核对下面的 Evidence；通过后才会完成或进入下一个人工门禁。</span>
+          </div>
+          <div>
+            <button type="button" disabled={busy} onClick={() => { void onDecision(detail, actionable, 'return') }}>
+              {busy ? '处理中…' : '退回执行'}
+            </button>
+            <button type="button" className={css.acceptButton} disabled={busy} onClick={() => { void onDecision(detail, actionable, 'accept') }}>
+              {busy ? '处理中…' : '通过验收'}
+            </button>
+          </div>
+        </div>
+      )}
+
       <DetailSection title="当前事实">
         <DetailGrid rows={[
           ['类型', card.taskType ?? '未分类'],
@@ -315,6 +417,7 @@ function TaskDetail({ detail }: { readonly detail: WorkConsoleTaskDetail }) {
         ]} />
         {card.placement?.stale === true && <div className={css.detailWarning}>Environment Revision 已变化，继续执行前必须重新 Preflight / Bind。</div>}
       </DetailSection>
+
       <DetailSection title={`Execution Threads · ${detail.threads.length}`}>
         {detail.threads.length === 0 && <div className={css.muted}>暂无 ExecutionThread</div>}
         <div className={css.detailList}>
@@ -330,7 +433,8 @@ function TaskDetail({ detail }: { readonly detail: WorkConsoleTaskDetail }) {
           })}
         </div>
       </DetailSection>
-      <DetailSection title={`Validation${detail.validationGeneration === undefined ? '' : ` · Gen ${detail.validationGeneration}`} `}>
+
+      <DetailSection title={`Validation${detail.validationGeneration === undefined ? '' : ` · Gen ${detail.validationGeneration}`}`}>
         {detail.validators.length === 0 && <div className={css.muted}>当前 Task 没有独立验收项</div>}
         <div className={css.detailList}>
           {detail.validators.map(validator => (
@@ -344,6 +448,7 @@ function TaskDetail({ detail }: { readonly detail: WorkConsoleTaskDetail }) {
           ))}
         </div>
       </DetailSection>
+
       <DetailSection title={`Environment · ${detail.environments.length}`}>
         {detail.environments.map(environment => (
           <div key={environment.id} className={css.environmentBlock}>
@@ -367,6 +472,30 @@ function DetailGrid({ rows }: { readonly rows: ReadonlyArray<readonly [string, s
       {rows.map(([label, value]) => <div key={label}><small>{label}</small><span>{value}</span></div>)}
     </div>
   )
+}
+
+async function handleIdeaDrop(
+  event: DragEvent<HTMLElement>,
+  onDrop: (idea: { readonly id: string; readonly revision: number }) => Promise<void>,
+): Promise<void> {
+  event.preventDefault()
+  const raw = event.dataTransfer.getData(IDEA_DRAG_TYPE)
+  if (raw === '') return
+  try {
+    const value = JSON.parse(raw) as { id?: unknown; revision?: unknown }
+    if (typeof value.id !== 'string' || !Number.isSafeInteger(value.revision) || Number(value.revision) < 1) return
+    await onDrop({ id: value.id, revision: Number(value.revision) })
+  } catch {
+    // Ignore unrelated/invalid drag payloads instead of turning them into work.
+  }
+}
+
+function actionableUserValidator(detail: WorkConsoleTaskDetail): WorkConsoleValidatorDetail | undefined {
+  if (detail.card.status !== 'validation' || detail.card.validation?.acceptanceState !== 'human-ready') return undefined
+  return detail.validators.find(validator =>
+    validator.kind === 'user-acceptance'
+    && validator.requirement === 'required'
+    && validator.outcome !== 'passed')
 }
 
 function filterIdeas(ideas: readonly WorkConsoleIdeaCard[], query: string): WorkConsoleIdeaCard[] {

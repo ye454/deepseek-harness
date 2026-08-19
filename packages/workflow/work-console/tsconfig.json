@@ -8,9 +8,9 @@
   "references": [
     { "path": "../../../vendor/cosmokit" },
     { "path": "../../../vendor/cordis" },
+    { "path": "../../identity/anonymous-user-id" },
     { "path": "../../typert/protocol" },
     { "path": "../../runtime-diagnostics/invariants" },
-    { "path": "../work-console-commands" },
     { "path": "../work-control" },
     { "path": "../work-execution" },
     { "path": "../work-node" },

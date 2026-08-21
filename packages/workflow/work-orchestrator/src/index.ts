@@ -7,12 +7,15 @@ import type { TaskWorkItem } from '@deepseek-ai/dsh-work-control'
 import type { ExecutionThread } from '@deepseek-ai/dsh-work-execution'
 import type { WorkEnvironment } from '@deepseek-ai/dsh-work-environment'
 import type {} from '@deepseek-ai/dsh-work-node'
-import type {} from '@deepseek-ai/dsh-work-node-gateway'
+import type { WorkNodeGateway } from '@deepseek-ai/dsh-work-node-gateway'
 import type { WorkHandoff } from '@deepseek-ai/dsh-work-runner-subagent'
 import type {
   StartWorkTaskRequest,
   StartWorkTaskResult,
   StartedWorkPlacement,
+  WorkExecutionCandidate,
+  WorkExecutionCandidateIssue,
+  WorkExecutionCandidateSnapshot,
   WorkOrchestratorPlacement,
 } from './types.ts'
 
@@ -55,10 +58,74 @@ interface ResolvedPlacement {
 
 /** Stateless coordinator over existing durable work authorities. */
 export class WorkOrchestrator extends Service {
-  static inject = ['workControl', 'workExecution', 'workNodes', 'workEnvironments', 'workNodeGateway']
+  // Gateway dispatch is deliberately optional: the global console can still expose
+  // scheduler/resource facts on installations that have no remote execution transport.
+  static inject = ['workControl', 'workExecution', 'workNodes', 'workEnvironments']
 
   constructor(ctx: Context) {
     super(ctx, 'workOrchestrator')
+  }
+
+  /**
+   * Build zero-token scheduler candidates without mutating work state.
+   * Dispatch availability is reported separately from Environment/Node compatibility.
+   */
+  listCandidates(): WorkExecutionCandidateSnapshot {
+    const leases = new Map<string, ExecutionThread['id']>()
+    for (const thread of this.ctx.workExecution.list()) {
+      if (thread.state === 'closed' || thread.state === 'cancelled') continue
+      const binding = this.ctx.workEnvironments.getBinding(thread.id)
+      if (binding === undefined) continue
+      const environment = this.ctx.workEnvironments.get(binding.environmentId)
+      if (environment === undefined) continue
+      leases.set(workspaceIsolationKey(environment), thread.id)
+    }
+
+    const candidates: WorkExecutionCandidate[] = this.ctx.workEnvironments.list().map(environment => {
+      const issues: WorkExecutionCandidateIssue[] = []
+      if (environment.state === 'degraded') issues.push('environment-degraded')
+      else if (environment.state === 'unavailable') issues.push('environment-unavailable')
+
+      const node = this.ctx.workNodes.get(environment.nodeId)
+      if (node === undefined) issues.push('node-missing')
+      else {
+        if (node.state === 'degraded') issues.push('node-degraded')
+        else if (node.state === 'offline') issues.push('node-offline')
+        if (!node.features.includes('execute')) issues.push('node-execute-unsupported')
+        if (node.runnerProviders.length === 0) issues.push('no-runner-provider')
+      }
+
+      const leasedByThreadId = leases.get(workspaceIsolationKey(environment))
+      if (leasedByThreadId !== undefined) issues.push('workspace-leased')
+      const workspace = environment.snapshot.workspace
+      return {
+        environmentId: environment.id,
+        environmentRevision: environment.revision,
+        environmentName: environment.name,
+        nodeId: environment.nodeId,
+        ...(node === undefined ? {} : { nodeName: node.name }),
+        providers: node === undefined ? [] : [...node.runnerProviders].sort(),
+        workspace: {
+          path: workspace.path,
+          ...(workspace.worktree === undefined ? {} : { worktree: workspace.worktree }),
+          ...(workspace.repository === undefined ? {} : { repository: workspace.repository }),
+          ...(workspace.branch === undefined ? {} : { branch: workspace.branch }),
+          ...(workspace.dirty === undefined ? {} : { dirty: workspace.dirty }),
+        },
+        ...(leasedByThreadId === undefined ? {} : { leasedByThreadId }),
+        available: issues.length === 0,
+        issues,
+      }
+    })
+
+    candidates.sort((left, right) =>
+      Number(right.available) - Number(left.available)
+      || left.environmentName.localeCompare(right.environmentName)
+      || String(left.environmentId).localeCompare(String(right.environmentId)))
+    return {
+      dispatchAvailable: optionalGateway(this.ctx) !== undefined,
+      candidates,
+    }
   }
 
   /**
@@ -70,6 +137,10 @@ export class WorkOrchestrator extends Service {
     this.assertFreshStart(task)
     const resolved = this.resolvePlacements(task, request.placements)
     this.assertNoWorkspaceCollisions(resolved)
+    const gateway = optionalGateway(this.ctx)
+    if (gateway === undefined) {
+      throw new WorkOrchestratorError('remote execution gateway is not configured')
+    }
 
     const started: StartedWorkPlacement[] = []
     for (const [index, placement] of resolved.entries()) {
@@ -87,7 +158,7 @@ export class WorkOrchestrator extends Service {
           )
         }
         const handoff: WorkHandoff = { nextStep: placement.role }
-        const command = await this.ctx.workNodeGateway.enqueueExecute(
+        const command = await gateway.enqueueExecute(
           { id: created.id, revision: created.revision },
           placement.provider,
           'one-shot',
@@ -211,6 +282,10 @@ export class WorkOrchestrator extends Service {
       this.ctx.logger.warn(`work-orchestrator: failed to cancel unpublished thread '${threadId}': ${renderError(error)}`)
     }
   }
+}
+
+function optionalGateway(ctx: Context): WorkNodeGateway | undefined {
+  return (ctx as unknown as { readonly workNodeGateway?: WorkNodeGateway }).workNodeGateway
 }
 
 function workspaceIsolationKey(environment: WorkEnvironment): string {

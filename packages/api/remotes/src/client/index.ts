@@ -41,6 +41,15 @@ export type {
   WorkConsoleValidationView,
   WorkConsoleValidatorDetail,
 } from '@deepseek-ai/dsh-work-console/types'
+export type {
+  CreateWorkConsoleIdeaRequest,
+  CreateWorkConsoleIdeaResult,
+  CreatedWorkConsoleIdea,
+  OrganizeWorkConsoleTaskRequest,
+  OrganizeWorkConsoleTaskResult,
+  OrganizedWorkConsoleTask,
+  WorkConsoleTaskType,
+} from '@deepseek-ai/dsh-work-console/intake-types'
 export type {} from '@deepseek-ai/dsh-commands/remote'
 export type {} from '@deepseek-ai/dsh-goal/remote'
 export type {} from '@deepseek-ai/dsh-host-plugin-inventory/remote'

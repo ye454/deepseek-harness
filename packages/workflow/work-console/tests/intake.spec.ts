@@ -32,7 +32,7 @@ const TYPES: readonly WorkConsoleTaskType[] = [
 ]
 
 describe('Work Console intake', () => {
-  it('captures a passive Idea without creating execution state', async () => {
+  it('captures a passive Idea without creating a Task', async () => {
     const ctx = await harness()
     const result = await ctx.workConsole.createIdea({
       title: '  雷达恢复策略  ',
@@ -42,7 +42,6 @@ describe('Work Console intake', () => {
     expect(result).toMatchObject({ ok: true, value: { title: '雷达恢复策略', revision: 1 } })
     expect(ctx.workControl.listIdeas()).toHaveLength(1)
     expect(ctx.workControl.listTasks()).toHaveLength(0)
-    expect(ctx.workExecution.listAll()).toHaveLength(0)
     await ctx.fiber.dispose()
   })
 

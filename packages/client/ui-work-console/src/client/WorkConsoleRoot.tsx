@@ -5,6 +5,7 @@ import type {
   WorkConsoleSnapshot,
   WorkConsoleTaskCard,
   WorkConsoleTaskDetail,
+  WorkConsoleTaskType,
   WorkConsoleValidatorDetail,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { WorkConsoleRootProps, WorkConsoleTriggerProps } from './contract.ts'
@@ -40,7 +41,9 @@ export function WorkConsoleRoot({
   closeConsole,
   refreshConsole,
   selectTask,
+  createIdea,
   promoteIdea,
+  organizeTask,
   decideAcceptance,
   clearError,
 }: WorkConsoleRootProps) {
@@ -50,6 +53,10 @@ export function WorkConsoleRoot({
   const [query, setQuery] = useState('')
   const [priority, setPriority] = useState<'all' | 'p0' | 'p1' | 'p2'>('all')
   const [busyKey, setBusyKey] = useState<string | undefined>()
+  const [captureOpen, setCaptureOpen] = useState(false)
+  const [ideaTitle, setIdeaTitle] = useState('')
+  const [ideaSummary, setIdeaSummary] = useState('')
+  const [ideaTags, setIdeaTags] = useState('')
 
   useEffect(() => {
     if (!open) return undefined
@@ -77,12 +84,38 @@ export function WorkConsoleRoot({
 
   const detail = remote.detailTaskId === selectedTaskId ? remote.detail : undefined
 
+  const runCreateIdea = async (): Promise<void> => {
+    if (busyKey !== undefined || ideaTitle.trim() === '') return
+    setBusyKey('idea:create')
+    try {
+      const ok = await createIdea(ideaTitle, ideaSummary, parseTags(ideaTags))
+      if (!ok) return
+      setIdeaTitle('')
+      setIdeaSummary('')
+      setIdeaTags('')
+      setCaptureOpen(false)
+    } finally {
+      setBusyKey(undefined)
+    }
+  }
+
   const runPromotion = async (idea: Pick<WorkConsoleIdeaCard, 'id' | 'revision'>): Promise<void> => {
     const key = `idea:${idea.id}`
     if (busyKey !== undefined) return
     setBusyKey(key)
     try {
       await promoteIdea(idea.id, idea.revision)
+    } finally {
+      setBusyKey(undefined)
+    }
+  }
+
+  const runOrganization = async (detailValue: WorkConsoleTaskDetail, taskType: WorkConsoleTaskType): Promise<void> => {
+    if (busyKey !== undefined) return
+    const key = `organize:${detailValue.card.id}`
+    setBusyKey(key)
+    try {
+      await organizeTask(detailValue.card.id, detailValue.card.revision, taskType)
     } finally {
       setBusyKey(undefined)
     }
@@ -118,9 +151,12 @@ export function WorkConsoleRoot({
               <h1 className={css.title}>持续工作控制台</h1>
               <span className={css.readOnly}>V1</span>
             </div>
-            <p className={css.subtitle}>想法沉淀 → 持续执行 → AI 验收后人工确认</p>
+            <p className={css.subtitle}>想法沉淀 → 人工组织 → 持续执行 → AI 验收后人工确认</p>
           </div>
           <div className={css.headerActions}>
+            <button type="button" className={css.secondaryButton} onClick={() => { setCaptureOpen(value => !value) }}>
+              {captureOpen ? '取消记录' : '+ 记录想法'}
+            </button>
             <button type="button" className={css.secondaryButton} disabled={remote.loading} onClick={() => { refreshConsole(selectedTaskId) }}>
               {remote.loading ? '刷新中…' : '刷新'}
             </button>
@@ -132,6 +168,23 @@ export function WorkConsoleRoot({
           <div className={css.errorBanner}>
             <span>{remote.error}</span>
             <button type="button" onClick={clearError}>关闭</button>
+          </div>
+        )}
+
+        {captureOpen && (
+          <div className={css.toolbar} aria-label="记录想法">
+            <input className={css.search} aria-label="想法标题" value={ideaTitle} placeholder="想法标题（必填）" onChange={event => { setIdeaTitle(event.currentTarget.value) }} />
+            <input className={css.search} aria-label="想法说明" value={ideaSummary} placeholder="一句话说明（可选）" onChange={event => { setIdeaSummary(event.currentTarget.value) }} />
+            <input className={css.search} aria-label="想法标签" value={ideaTags} placeholder="标签，逗号分隔（可选）" onChange={event => { setIdeaTags(event.currentTarget.value) }} />
+            <span className={css.historyHint}>仅记录，不进入执行，不调用模型</span>
+            <button
+              type="button"
+              className={css.secondaryButton}
+              disabled={busyKey !== undefined || ideaTitle.trim() === ''}
+              onClick={() => { void runCreateIdea() }}
+            >
+              {busyKey === 'idea:create' ? '记录中…' : '保存想法'}
+            </button>
           </div>
         )}
 
@@ -160,7 +213,7 @@ export function WorkConsoleRoot({
           <IdeaSection ideas={ideas} busyKey={busyKey} onPromote={runPromotion} />
           <TaskSection
             title="执行区"
-            hint="拖入成熟想法；系统持续组织、执行、自动验证"
+            hint="拖入成熟想法；待组织 Task 需人工确认流程后再进入执行"
             tasks={execution}
             empty="当前没有执行中的 Task"
             onSelect={selectTask}
@@ -180,8 +233,10 @@ export function WorkConsoleRoot({
           <TaskDetailDrawer
             detail={detail}
             loading={remote.detailLoading && remote.detailTaskId === selectedTaskId}
-            busy={busyKey === `accept:${selectedTaskId}`}
+            decisionBusy={busyKey === `accept:${selectedTaskId}`}
+            organizationBusy={busyKey === `organize:${selectedTaskId}`}
             onDecision={runDecision}
+            onOrganize={runOrganization}
             onClose={() => { actions.selectTask(null) }}
           />
         )}
@@ -347,15 +402,17 @@ function Fact({ label, value, warning = false }: { readonly label: string; reado
   return <span className={`${css.fact} ${warning ? css.factWarning : ''}`}><small>{label}</small>{value}</span>
 }
 
-function TaskDetailDrawer({ detail, loading, busy, onDecision, onClose }: {
+function TaskDetailDrawer({ detail, loading, decisionBusy, organizationBusy, onDecision, onOrganize, onClose }: {
   readonly detail: WorkConsoleTaskDetail | undefined
   readonly loading: boolean
-  readonly busy: boolean
+  readonly decisionBusy: boolean
+  readonly organizationBusy: boolean
   readonly onDecision: (
     detail: WorkConsoleTaskDetail,
     validator: WorkConsoleValidatorDetail,
     decision: 'accept' | 'return',
   ) => Promise<void>
+  readonly onOrganize: (detail: WorkConsoleTaskDetail, taskType: WorkConsoleTaskType) => Promise<void>
   readonly onClose: () => void
 }) {
   return (
@@ -364,23 +421,26 @@ function TaskDetailDrawer({ detail, loading, busy, onDecision, onClose }: {
         <button type="button" className={css.drawerClose} aria-label="关闭 Task Detail" onClick={onClose}>×</button>
         {detail === undefined ? (
           <div className={css.detailEmpty}>{loading ? '正在读取 Task Detail…' : 'Task Detail 暂不可用'}</div>
-        ) : <TaskDetail detail={detail} busy={busy} onDecision={onDecision} />}
+        ) : <TaskDetail detail={detail} decisionBusy={decisionBusy} organizationBusy={organizationBusy} onDecision={onDecision} onOrganize={onOrganize} />}
       </aside>
     </div>
   )
 }
 
-function TaskDetail({ detail, busy, onDecision }: {
+function TaskDetail({ detail, decisionBusy, organizationBusy, onDecision, onOrganize }: {
   readonly detail: WorkConsoleTaskDetail
-  readonly busy: boolean
+  readonly decisionBusy: boolean
+  readonly organizationBusy: boolean
   readonly onDecision: (
     detail: WorkConsoleTaskDetail,
     validator: WorkConsoleValidatorDetail,
     decision: 'accept' | 'return',
   ) => Promise<void>
+  readonly onOrganize: (detail: WorkConsoleTaskDetail, taskType: WorkConsoleTaskType) => Promise<void>
 }) {
   const { card } = detail
   const actionable = actionableUserValidator(detail)
+  const [taskType, setTaskType] = useState<WorkConsoleTaskType>('custom')
   return (
     <>
       <div className={css.detailHeader}>
@@ -389,6 +449,32 @@ function TaskDetail({ detail, busy, onDecision }: {
         {card.summary !== '' && <p>{card.summary}</p>}
       </div>
 
+      {card.status === 'unclaimed' && (
+        <div className={css.acceptanceActions}>
+          <div>
+            <strong>组织执行</strong>
+            <span>选择任务类型后生成确定性 Workflow / Validator；不会调用模型，也不会自动启动 Runner。</span>
+          </div>
+          <div>
+            <label className={css.selectWrap}>
+              <span className={css.srOnly}>任务类型</span>
+              <select aria-label="任务类型" value={taskType} onChange={event => { setTaskType(event.currentTarget.value as WorkConsoleTaskType) }}>
+                <option value="bug-fix">问题修复</option>
+                <option value="ui-fix">UI 修复</option>
+                <option value="feature">新功能</option>
+                <option value="performance">性能优化</option>
+                <option value="deployment">部署</option>
+                <option value="research">技术研究</option>
+                <option value="custom">自定义</option>
+              </select>
+            </label>
+            <button type="button" className={css.acceptButton} disabled={organizationBusy} onClick={() => { void onOrganize(detail, taskType) }}>
+              {organizationBusy ? '组织中…' : '确认组织'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {actionable !== undefined && detail.validationGeneration !== undefined && (
         <div className={css.acceptanceActions}>
           <div>
@@ -396,11 +482,11 @@ function TaskDetail({ detail, busy, onDecision }: {
             <span>先核对下面的 Evidence；通过后才会完成或进入下一个人工门禁。</span>
           </div>
           <div>
-            <button type="button" disabled={busy} onClick={() => { void onDecision(detail, actionable, 'return') }}>
-              {busy ? '处理中…' : '退回执行'}
+            <button type="button" disabled={decisionBusy} onClick={() => { void onDecision(detail, actionable, 'return') }}>
+              {decisionBusy ? '处理中…' : '退回执行'}
             </button>
-            <button type="button" className={css.acceptButton} disabled={busy} onClick={() => { void onDecision(detail, actionable, 'accept') }}>
-              {busy ? '处理中…' : '通过验收'}
+            <button type="button" className={css.acceptButton} disabled={decisionBusy} onClick={() => { void onDecision(detail, actionable, 'accept') }}>
+              {decisionBusy ? '处理中…' : '通过验收'}
             </button>
           </div>
         </div>
@@ -535,6 +621,10 @@ function executionLabel(task: WorkConsoleTaskCard): string {
 function statusLabel(status: WorkConsoleTaskCard['status']): string {
   const labels = { unclaimed: '待组织', running: '进行中', blocked: '阻塞', validation: '验收中', done: '完成' } as const
   return labels[status]
+}
+
+function parseTags(value: string): string[] {
+  return [...new Set(value.split(',').map(tag => tag.trim()).filter(tag => tag !== ''))]
 }
 
 function shortId(value: string): string {

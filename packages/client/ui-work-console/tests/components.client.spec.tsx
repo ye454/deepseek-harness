@@ -32,6 +32,8 @@ const running = card({
   },
 })
 
+const organizing = card({ id: 'organize-me', revision: 2, title: '待组织 Task', priority: 'p2', status: 'unclaimed' })
+
 const humanReady = card({
   id: 'accept-me', title: '后台 UI 修复', priority: 'p1', status: 'validation',
   validation: { state: 'pending', requiredPassed: 1, requiredTotal: 2, acceptanceState: 'human-ready', pendingUserAcceptance: 1 },
@@ -48,7 +50,7 @@ const snapshot: WorkConsoleSnapshot = {
     { id: 'idea-1', revision: 3, title: 'RAG 新索引策略', summary: '先沉淀。', tags: ['rag'], createdAt: '2026-08-18T10:00:00.000Z', updatedAt: '2026-08-18T10:00:00.000Z' },
     { id: 'idea-2', revision: 1, title: '机器人异常自恢复', summary: '', tags: [], createdAt: '2026-08-18T09:00:00.000Z', updatedAt: '2026-08-18T09:00:00.000Z' },
   ],
-  tasks: [running, humanReady, automatedFailed, card({ id: 'done', title: '完成任务', priority: 'p2', status: 'done' })],
+  tasks: [running, organizing, humanReady, automatedFailed, card({ id: 'done', title: '完成任务', priority: 'p2', status: 'done' })],
   resources: {
     nodes: { total: 2, online: 1, degraded: 0, offline: 1 },
     environments: { total: 2, ready: 1, degraded: 1, unavailable: 0 },
@@ -68,10 +70,14 @@ const acceptanceDetail: WorkConsoleTaskDetail = {
   ],
 }
 
+const organizingDetail: WorkConsoleTaskDetail = { card: organizing, threads: [], environments: [], validators: [] }
+
 function props(options: {
   selected?: string | null
   remote?: Partial<WorkConsoleRemoteState>
+  createIdea?: WorkConsoleRootProps['createIdea']
   promoteIdea?: WorkConsoleRootProps['promoteIdea']
+  organizeTask?: WorkConsoleRootProps['organizeTask']
   decideAcceptance?: WorkConsoleRootProps['decideAcceptance']
 } = {}): WorkConsoleRootProps {
   const selected = options.selected ?? null
@@ -82,7 +88,7 @@ function props(options: {
     error: undefined,
     snapshot,
     detailTaskId: selected ?? undefined,
-    detail: selected === 'accept-me' ? acceptanceDetail : undefined,
+    detail: selected === 'accept-me' ? acceptanceDetail : selected === 'organize-me' ? organizingDetail : undefined,
     ...options.remote,
   }
   return {
@@ -95,7 +101,9 @@ function props(options: {
     closeConsole: vi.fn(),
     refreshConsole: vi.fn(),
     selectTask: vi.fn(),
+    createIdea: options.createIdea ?? vi.fn().mockResolvedValue(true),
     promoteIdea: options.promoteIdea ?? vi.fn().mockResolvedValue(true),
+    organizeTask: options.organizeTask ?? vi.fn().mockResolvedValue(true),
     decideAcceptance: options.decideAcceptance ?? vi.fn().mockResolvedValue(true),
     clearError: vi.fn(),
   }
@@ -125,11 +133,26 @@ describe('WorkConsoleRoot', () => {
     const acceptance = within(screen.getByRole('region', { name: '验收区' }))
     expect(ideas.getByText('RAG 新索引策略')).toBeTruthy()
     expect(execution.getByText('G1 雷达漂移')).toBeTruthy()
+    expect(execution.getByText('待组织 Task')).toBeTruthy()
     expect(execution.getByText('自动验收失败任务')).toBeTruthy()
     expect(acceptance.getByText('后台 UI 修复')).toBeTruthy()
     expect(execution.queryByText('完成任务')).toBeNull()
     expect(screen.getByText('已完成 1 · 进入执行历史查看')).toBeTruthy()
     expect(screen.getByText('ENV STALE')).toBeTruthy()
+  })
+
+  it('captures a new Idea explicitly and states that it does not enter execution', async () => {
+    const createIdea = vi.fn().mockResolvedValue(true)
+    render(<WorkConsoleRoot {...props({ createIdea })} />)
+    fireEvent.click(screen.getByRole('button', { name: '+ 记录想法' }))
+    expect(screen.getByText('仅记录，不进入执行，不调用模型')).toBeTruthy()
+    fireEvent.change(screen.getByRole('textbox', { name: '想法标题' }), { target: { value: '  新 RAG 方案  ' } })
+    fireEvent.change(screen.getByRole('textbox', { name: '想法说明' }), { target: { value: '先记录' } })
+    fireEvent.change(screen.getByRole('textbox', { name: '想法标签' }), { target: { value: 'rag, search,rag' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存想法' }))
+    await vi.waitFor(() => {
+      expect(createIdea).toHaveBeenCalledWith('  新 RAG 方案  ', '先记录', ['rag', 'search'])
+    })
   })
 
   it('promotes an Idea only after explicit button action', async () => {
@@ -171,6 +194,18 @@ describe('WorkConsoleRoot', () => {
     expect(setData).toHaveBeenCalledWith('application/x-dsh-work-idea', JSON.stringify({ id: 'idea-1', revision: 3 }))
   })
 
+  it('organizes an unclaimed Task only after the user selects a type and confirms', async () => {
+    const organizeTask = vi.fn().mockResolvedValue(true)
+    render(<WorkConsoleRoot {...props({ selected: 'organize-me', organizeTask })} />)
+    const drawer = screen.getByLabelText('Task Detail')
+    expect(within(drawer).getByText(/不会调用模型，也不会自动启动 Runner/)).toBeTruthy()
+    fireEvent.change(within(drawer).getByRole('combobox', { name: '任务类型' }), { target: { value: 'bug-fix' } })
+    fireEvent.click(within(drawer).getByRole('button', { name: '确认组织' }))
+    await vi.waitFor(() => {
+      expect(organizeTask).toHaveBeenCalledWith('organize-me', organizing.revision, 'bug-fix')
+    })
+  })
+
   it('shows acceptance controls only after Evidence is opened and passes exact decision coordinates', async () => {
     const decideAcceptance = vi.fn().mockResolvedValue(true)
     render(<WorkConsoleRoot {...props({ selected: 'accept-me', decideAcceptance })} />)
@@ -196,6 +231,7 @@ describe('WorkConsoleRoot', () => {
     render(<WorkConsoleRoot {...props({ selected: 'running', remote: { detailTaskId: 'running', detail } })} />)
     expect(screen.queryByRole('button', { name: '通过验收' })).toBeNull()
     expect(screen.queryByRole('button', { name: '退回执行' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '确认组织' })).toBeNull()
   })
 
   it('filters by search/priority and preserves Idea visibility under Task priority filtering', () => {

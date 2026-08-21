@@ -58,7 +58,9 @@ function props(): WorkConsoleRootProps {
     closeConsole: vi.fn(),
     refreshConsole: vi.fn(),
     selectTask: vi.fn(),
+    createIdea: vi.fn().mockResolvedValue(true),
     promoteIdea: vi.fn().mockResolvedValue(true),
+    organizeTask: vi.fn().mockResolvedValue(true),
     decideAcceptance: vi.fn().mockResolvedValue(true),
     clearError: vi.fn(),
   }
@@ -77,6 +79,7 @@ describe('WorkConsoleRoot minimal detail', () => {
     expect(within(drawer).getByText('Validation')).toBeTruthy()
     expect(within(drawer).getByText('Environment · 0')).toBeTruthy()
     expect(within(drawer).getByText('待组织')).toBeTruthy()
+    expect(within(drawer).getByRole('button', { name: '确认组织' })).toBeTruthy()
     expect(within(drawer).queryByText('ENV STALE')).toBeNull()
   })
 })

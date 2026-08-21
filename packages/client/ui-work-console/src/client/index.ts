@@ -57,8 +57,16 @@ export function apply(ctx: ClientContext): void {
       actions.selectTask(taskId)
       void controller.loadTask(taskId)
     },
+    createIdea: async (title, summary, tags) =>
+      (await controller.createIdea({ title, summary, tags })) !== undefined,
     promoteIdea: async (id, revision) =>
       (await controller.promoteIdea({ id, revision })) !== undefined,
+    organizeTask: async (taskId, taskRevision, taskType) => {
+      const value = await controller.organizeTask({ taskId, taskRevision, taskType })
+      if (value === undefined) return false
+      await controller.loadTask(taskId)
+      return true
+    },
     decideAcceptance: async (taskId, taskRevision, generation, validatorIndex, decision) => {
       const value = await controller.decideAcceptance({
         taskId,

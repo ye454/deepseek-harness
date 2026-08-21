@@ -1,4 +1,5 @@
 /** Work Console slot/inject contracts. Component props are entirely framework-derived shares. */
+import type { WorkConsoleTaskType } from '@deepseek-ai/dsh-api-remotes/client'
 import type {
   HostObservable,
   InjectFace,
@@ -19,8 +20,12 @@ export type WorkConsoleInjected = {
   closeConsole: () => void
   refreshConsole: (selectedTaskId: string | null) => void
   selectTask: (taskId: string) => void
+  /** Capture a passive Idea only. */
+  createIdea: (title: string, summary: string, tags: readonly string[]) => Promise<boolean>
   /** Explicit Idea -> organizing Task transition; returns whether the Host committed it. */
   promoteIdea: (id: string, revision: number) => Promise<boolean>
+  /** Human-selected deterministic Workflow/Validation template; does not start a Runner. */
+  organizeTask: (taskId: string, taskRevision: number, taskType: WorkConsoleTaskType) => Promise<boolean>
   /** Explicit human decision after the user has inspected Task Detail/Evidence. */
   decideAcceptance: (
     taskId: string,

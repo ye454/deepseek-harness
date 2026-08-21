@@ -39,9 +39,17 @@ async function bench() {
   await ctx.plugin(SlotRegistry).await()
   const snapshotRemote = vi.fn().mockResolvedValue({ ok: true, value: snapshot })
   const taskRemote = vi.fn().mockResolvedValue({ ok: true, value: detail })
+  const createRemote = vi.fn().mockResolvedValue({
+    ok: true,
+    value: { ok: true, value: { id: 'idea-1', revision: 1, title: 'new idea' } },
+  })
   const promoteRemote = vi.fn().mockResolvedValue({
     ok: true,
     value: { ok: true, value: { id: 'idea-1', revision: 2, status: 'organizing', priority: 'p2' } },
+  })
+  const organizeRemote = vi.fn().mockResolvedValue({
+    ok: true,
+    value: { ok: true, value: { taskId: 'task-p0', revision: 2, status: 'running', taskType: 'bug-fix', stageId: 'diagnosis' } },
   })
   const decideRemote = vi.fn().mockResolvedValue({
     ok: true,
@@ -51,7 +59,9 @@ async function bench() {
     workConsole: {
       snapshot: snapshotRemote,
       task: taskRemote,
+      createIdea: createRemote,
       promoteIdea: promoteRemote,
+      organizeTask: organizeRemote,
       decideAcceptance: decideRemote,
     },
   } as never)
@@ -70,7 +80,7 @@ async function bench() {
   await parent.await()
   const fiber = ctx.plugin({ apply })
   await fiber.await()
-  return { ctx, fiber, parent, snapshotRemote, taskRemote, promoteRemote, decideRemote }
+  return { ctx, fiber, parent, snapshotRemote, taskRemote, createRemote, promoteRemote, organizeRemote, decideRemote }
 }
 
 function injectedFace(ctx: Context, actions: { open: () => void; close: () => void; selectTask: (taskId: string | null) => void }): WorkConsoleInjected {
@@ -148,6 +158,15 @@ describe('ui-work-console client apply', () => {
     expect(actions.close).toHaveBeenCalledOnce()
   })
 
+  it('wires passive Idea capture through the unified Work Console Remote', async () => {
+    const { ctx, createRemote, snapshotRemote } = await bench()
+    const actions = { open: vi.fn(), close: vi.fn(), selectTask: vi.fn() }
+    const face = injectedFace(ctx, actions)
+    await expect(face.createIdea('idea', 'summary', ['rag'])).resolves.toBe(true)
+    expect(createRemote).toHaveBeenCalledWith({ title: 'idea', summary: 'summary', tags: ['rag'] })
+    expect(snapshotRemote).toHaveBeenCalledOnce()
+  })
+
   it('wires Idea promotion through the unified Work Console Remote', async () => {
     const { ctx, promoteRemote, snapshotRemote } = await bench()
     const actions = { open: vi.fn(), close: vi.fn(), selectTask: vi.fn() }
@@ -155,6 +174,16 @@ describe('ui-work-console client apply', () => {
     await expect(face.promoteIdea('idea-1', 1)).resolves.toBe(true)
     expect(promoteRemote).toHaveBeenCalledWith({ id: 'idea-1', revision: 1 })
     expect(snapshotRemote).toHaveBeenCalledOnce()
+  })
+
+  it('wires deterministic organization and reloads the selected Task Detail', async () => {
+    const { ctx, organizeRemote, snapshotRemote, taskRemote } = await bench()
+    const actions = { open: vi.fn(), close: vi.fn(), selectTask: vi.fn() }
+    const face = injectedFace(ctx, actions)
+    await expect(face.organizeTask('task-p0', 1, 'bug-fix')).resolves.toBe(true)
+    expect(organizeRemote).toHaveBeenCalledWith({ taskId: 'task-p0', taskRevision: 1, taskType: 'bug-fix' })
+    expect(snapshotRemote).toHaveBeenCalledOnce()
+    expect(taskRemote).toHaveBeenCalledWith('task-p0')
   })
 
   it('keeps acceptance detail open while another human gate remains and closes terminal decisions', async () => {
@@ -177,10 +206,18 @@ describe('ui-work-console client apply', () => {
   })
 
   it('does not mutate local selection when Host mutation commands fail', async () => {
-    const { ctx, promoteRemote, decideRemote } = await bench()
+    const { ctx, createRemote, promoteRemote, organizeRemote, decideRemote } = await bench()
+    createRemote.mockResolvedValueOnce({
+      ok: true,
+      value: { ok: false, error: { code: 'invalid-input', field: 'title', reason: 'empty' } },
+    })
     promoteRemote.mockResolvedValueOnce({
       ok: true,
       value: { ok: false, error: { code: 'conflict', id: 'idea-1', expectedRevision: 1, currentRevision: 2 } },
+    })
+    organizeRemote.mockResolvedValueOnce({
+      ok: true,
+      value: { ok: false, error: { code: 'conflict', id: 'task-p0', expectedRevision: 1, currentRevision: 2 } },
     })
     decideRemote.mockResolvedValueOnce({
       ok: true,
@@ -188,7 +225,9 @@ describe('ui-work-console client apply', () => {
     })
     const actions = { open: vi.fn(), close: vi.fn(), selectTask: vi.fn() }
     const face = injectedFace(ctx, actions)
+    await expect(face.createIdea(' ', '', [])).resolves.toBe(false)
     await expect(face.promoteIdea('idea-1', 1)).resolves.toBe(false)
+    await expect(face.organizeTask('task-p0', 1, 'custom')).resolves.toBe(false)
     await expect(face.decideAcceptance('task-p0', 1, 2, 1, 'accept')).resolves.toBe(false)
     expect(actions.selectTask).not.toHaveBeenCalled()
   })

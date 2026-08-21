@@ -11,6 +11,7 @@
     "./invariant": { "types": "./lib/types/invariant.d.ts", "default": "./lib/invariant.js" },
     "./types": { "types": "./lib/types/types.d.ts", "default": "./lib/types/types.js" },
     "./intake-types": { "types": "./lib/types/intake-types.d.ts", "default": "./lib/types/intake-types.js" },
+    "./execution-types": { "types": "./lib/types/execution-types.d.ts", "default": "./lib/types/execution-types.js" },
     "./typert": { "types": "./lib/typert.host.d.ts", "default": "./lib/typert.host.js" },
     "./remote": { "types": "./lib/typert.remote-client.d.ts", "default": "./lib/typert.remote-client.js" },
     "./src/*": "./src/*",
@@ -37,6 +38,7 @@
     "@deepseek-ai/dsh-work-environment": "workspace:^",
     "@deepseek-ai/dsh-work-execution": "workspace:^",
     "@deepseek-ai/dsh-work-node": "workspace:^",
+    "@deepseek-ai/dsh-work-orchestrator": "workspace:^",
     "@deepseek-ai/dsh-work-validation": "workspace:^"
   },
   "devDependencies": {
@@ -51,6 +53,7 @@
     "@deepseek-ai/dsh-work-environment": "workspace:^",
     "@deepseek-ai/dsh-work-execution": "workspace:^",
     "@deepseek-ai/dsh-work-node": "workspace:^",
+    "@deepseek-ai/dsh-work-orchestrator": "workspace:^",
     "@deepseek-ai/dsh-work-validation": "workspace:^"
   }
 }

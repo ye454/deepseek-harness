@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
-import WorkControlService from '@deepseek-ai/dsh-work-control'
+import WorkControlService, { WorkItemConflictError, WorkItemTransitionError } from '@deepseek-ai/dsh-work-control'
 import WorkExecutionService from '@deepseek-ai/dsh-work-execution'
 import WorkEnvironmentRegistry from '@deepseek-ai/dsh-work-environment'
 import WorkNodeRegistry from '@deepseek-ai/dsh-work-node'
@@ -45,6 +45,14 @@ describe('Work Console intake', () => {
     await ctx.fiber.dispose()
   })
 
+  it('accepts title-only capture and leaves optional summary/tags empty', async () => {
+    const ctx = await harness()
+    const result = await ctx.workConsole.createIdea({ title: '仅标题' })
+    expect(result.ok).toBe(true)
+    expect(ctx.workControl.listIdeas()[0]).toMatchObject({ title: '仅标题', summary: '', tags: [] })
+    await ctx.fiber.dispose()
+  })
+
   it('rejects an empty Idea title without writing a work item', async () => {
     const ctx = await harness()
     expect(await ctx.workConsole.createIdea({ title: '   ' })).toEqual({
@@ -75,8 +83,12 @@ describe('Work Console intake', () => {
     await ctx.fiber.dispose()
   })
 
-  it('rejects stale and non-organizing organization requests', async () => {
+  it('rejects missing, stale, passive, and already-organized requests', async () => {
     const ctx = await harness()
+    expect(await ctx.workConsole.organizeTask({
+      taskId: 'missing-task', taskRevision: 1, taskType: 'custom',
+    })).toMatchObject({ ok: false, error: { code: 'not-found' } })
+
     const idea = await ctx.workControl.createIdea({ title: 'organize guard' })
     expect(await ctx.workConsole.organizeTask({
       taskId: String(idea.id), taskRevision: idea.revision, taskType: 'custom',
@@ -86,6 +98,36 @@ describe('Work Console intake', () => {
     expect(await ctx.workConsole.organizeTask({
       taskId: String(promoted.id), taskRevision: promoted.revision - 1, taskType: 'custom',
     })).toMatchObject({ ok: false, error: { code: 'conflict' } })
+
+    const organized = await ctx.workConsole.organizeTask({
+      taskId: String(promoted.id), taskRevision: promoted.revision, taskType: 'custom',
+    })
+    if (!organized.ok) throw new Error('expected first organization to succeed')
+    expect(await ctx.workConsole.organizeTask({
+      taskId: String(promoted.id), taskRevision: organized.value.revision, taskType: 'custom',
+    })).toMatchObject({ ok: false, error: { code: 'invalid-state' } })
+    await ctx.fiber.dispose()
+  })
+
+  it('maps organization CAS and transition races to typed business failures', async () => {
+    const ctx = await harness()
+    const idea = await ctx.workControl.createIdea({ title: 'race guards' })
+    const promoted = await ctx.workControl.promoteIdea({ id: idea.id, revision: idea.revision })
+    const ref = { id: promoted.id, revision: promoted.revision }
+
+    vi.spyOn(ctx.workControl, 'organizeTask').mockRejectedValueOnce(
+      new WorkItemConflictError(ref, promoted.revision + 1),
+    )
+    expect(await ctx.workConsole.organizeTask({
+      taskId: String(promoted.id), taskRevision: promoted.revision, taskType: 'bug-fix',
+    })).toMatchObject({ ok: false, error: { code: 'conflict', currentRevision: promoted.revision + 1 } })
+
+    vi.spyOn(ctx.workControl, 'organizeTask').mockRejectedValueOnce(
+      new WorkItemTransitionError('task changed state during organization'),
+    )
+    expect(await ctx.workConsole.organizeTask({
+      taskId: String(promoted.id), taskRevision: promoted.revision, taskType: 'bug-fix',
+    })).toMatchObject({ ok: false, error: { code: 'invalid-state', reason: 'task changed state during organization' } })
     await ctx.fiber.dispose()
   })
 })

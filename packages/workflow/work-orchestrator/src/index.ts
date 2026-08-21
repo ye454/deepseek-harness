@@ -6,6 +6,8 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import type { TaskWorkItem } from '@deepseek-ai/dsh-work-control'
 import type { ExecutionThread } from '@deepseek-ai/dsh-work-execution'
 import type { WorkEnvironment } from '@deepseek-ai/dsh-work-environment'
+import type {} from '@deepseek-ai/dsh-work-node'
+import type {} from '@deepseek-ai/dsh-work-node-gateway'
 import type { WorkHandoff } from '@deepseek-ai/dsh-work-runner-subagent'
 import type {
   StartWorkTaskRequest,

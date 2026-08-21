@@ -4,7 +4,11 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type {
+  CreateWorkConsoleIdeaRequest,
+  CreatedWorkConsoleIdea,
   DecideWorkConsoleAcceptanceRequest,
+  OrganizedWorkConsoleTask,
+  OrganizeWorkConsoleTaskRequest,
   PromoteWorkConsoleIdeaRequest,
   PromotedWorkConsoleTask,
   WorkConsoleAcceptanceDecisionValue,
@@ -100,6 +104,27 @@ export class WorkConsoleController {
     }
   }
 
+  /** Capture one passive Idea. The Host writes no execution state. */
+  async createIdea(request: CreateWorkConsoleIdeaRequest): Promise<CreatedWorkConsoleIdea | undefined> {
+    this.publish({ ...this.state, error: undefined })
+    try {
+      const transport = await this.ctx.remote.workConsole.createIdea(request)
+      if (!transport.ok) {
+        this.publish({ ...this.state, error: `workConsole.createIdea: ${transport.error.code}: ${transport.error.message}` })
+        return undefined
+      }
+      if (!transport.value.ok) {
+        this.publish({ ...this.state, error: `想法内容无效：${transport.value.error.reason}` })
+        return undefined
+      }
+      await this.refresh()
+      return transport.value.value
+    } catch (error) {
+      this.publish({ ...this.state, error: renderError(error) })
+      return undefined
+    }
+  }
+
   /** Explicitly promote one passive Idea. No automatic organization/model work is started. */
   async promoteIdea(request: PromoteWorkConsoleIdeaRequest): Promise<PromotedWorkConsoleTask | undefined> {
     this.publish({ ...this.state, error: undefined })
@@ -107,6 +132,27 @@ export class WorkConsoleController {
       const transport = await this.ctx.remote.workConsole.promoteIdea(request)
       if (!transport.ok) {
         this.publish({ ...this.state, error: `workConsole.promoteIdea: ${transport.error.code}: ${transport.error.message}` })
+        return undefined
+      }
+      if (!transport.value.ok) {
+        this.publish({ ...this.state, error: renderCommandFailure(transport.value.error) })
+        return undefined
+      }
+      await this.refresh()
+      return transport.value.value
+    } catch (error) {
+      this.publish({ ...this.state, error: renderError(error) })
+      return undefined
+    }
+  }
+
+  /** Commit one human-selected deterministic Workflow/Validation template. */
+  async organizeTask(request: OrganizeWorkConsoleTaskRequest): Promise<OrganizedWorkConsoleTask | undefined> {
+    this.publish({ ...this.state, error: undefined })
+    try {
+      const transport = await this.ctx.remote.workConsole.organizeTask(request)
+      if (!transport.ok) {
+        this.publish({ ...this.state, error: `workConsole.organizeTask: ${transport.error.code}: ${transport.error.message}` })
         return undefined
       }
       if (!transport.value.ok) {

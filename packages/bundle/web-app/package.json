@@ -106,6 +106,7 @@
     "@deepseek-ai/dsh-work-environment": "workspace:^",
     "@deepseek-ai/dsh-work-execution": "workspace:^",
     "@deepseek-ai/dsh-work-node": "workspace:^",
+    "@deepseek-ai/dsh-work-orchestrator": "workspace:^",
     "@deepseek-ai/dsh-work-validation": "workspace:^",
     "@deepseek-ai/dsh-workspace": "workspace:^",
     "@deepseek-ai/schemastery": "workspace:^",

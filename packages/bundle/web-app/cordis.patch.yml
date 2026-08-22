@@ -83,6 +83,11 @@
     - id: work-validation
       name: '@deepseek-ai/dsh-work-validation'
 
+    # Durable execution facts advance workflow Stages continuously; this layer
+    # never treats Runner prose as validation Evidence.
+    - id: work-execution-coordinator
+      name: '@deepseek-ai/dsh-work-execution-coordinator'
+
     - id: work-console
       name: '@deepseek-ai/dsh-work-console'
 

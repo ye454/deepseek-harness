@@ -50,6 +50,16 @@ export type {
   OrganizedWorkConsoleTask,
   WorkConsoleTaskType,
 } from '@deepseek-ai/dsh-work-console/intake-types'
+export type {
+  StartWorkConsoleExecutionRequest,
+  StartWorkConsoleExecutionResult,
+  StartedWorkConsoleExecution,
+  StartedWorkConsoleExecutionPlacement,
+  WorkConsoleExecutionCandidate,
+  WorkConsoleExecutionPlacementRequest,
+  WorkConsoleExecutionPlanSnapshot,
+  WorkConsoleExecutionStartFailure,
+} from '@deepseek-ai/dsh-work-console/execution-types'
 export type {} from '@deepseek-ai/dsh-commands/remote'
 export type {} from '@deepseek-ai/dsh-goal/remote'
 export type {} from '@deepseek-ai/dsh-host-plugin-inventory/remote'

@@ -32,6 +32,11 @@ const running = card({
   },
 })
 
+const dispatchable = card({
+  id: 'dispatch-me', revision: 5, title: 'P0 并行排障', priority: 'p0', status: 'running',
+  taskType: 'bug-fix', stage: { id: 'verify', title: '方案验证', kind: 'validation' },
+})
+
 const organizing = card({ id: 'organize-me', revision: 2, title: '待组织 Task', priority: 'p2', status: 'unclaimed' })
 
 const humanReady = card({
@@ -50,7 +55,7 @@ const snapshot: WorkConsoleSnapshot = {
     { id: 'idea-1', revision: 3, title: 'RAG 新索引策略', summary: '先沉淀。', tags: ['rag'], createdAt: '2026-08-18T10:00:00.000Z', updatedAt: '2026-08-18T10:00:00.000Z' },
     { id: 'idea-2', revision: 1, title: '机器人异常自恢复', summary: '', tags: [], createdAt: '2026-08-18T09:00:00.000Z', updatedAt: '2026-08-18T09:00:00.000Z' },
   ],
-  tasks: [running, organizing, humanReady, automatedFailed, card({ id: 'done', title: '完成任务', priority: 'p2', status: 'done' })],
+  tasks: [running, dispatchable, organizing, humanReady, automatedFailed, card({ id: 'done', title: '完成任务', priority: 'p2', status: 'done' })],
   resources: {
     nodes: { total: 2, online: 1, degraded: 0, offline: 1 },
     environments: { total: 2, ready: 1, degraded: 1, unavailable: 0 },
@@ -71,6 +76,7 @@ const acceptanceDetail: WorkConsoleTaskDetail = {
 }
 
 const organizingDetail: WorkConsoleTaskDetail = { card: organizing, threads: [], environments: [], validators: [] }
+const dispatchableDetail: WorkConsoleTaskDetail = { card: dispatchable, threads: [], environments: [], validators: [] }
 
 function props(options: {
   selected?: string | null
@@ -78,6 +84,8 @@ function props(options: {
   createIdea?: WorkConsoleRootProps['createIdea']
   promoteIdea?: WorkConsoleRootProps['promoteIdea']
   organizeTask?: WorkConsoleRootProps['organizeTask']
+  loadExecutionPlan?: WorkConsoleRootProps['loadExecutionPlan']
+  startExecution?: WorkConsoleRootProps['startExecution']
   decideAcceptance?: WorkConsoleRootProps['decideAcceptance']
 } = {}): WorkConsoleRootProps {
   const selected = options.selected ?? null
@@ -88,7 +96,9 @@ function props(options: {
     error: undefined,
     snapshot,
     detailTaskId: selected ?? undefined,
-    detail: selected === 'accept-me' ? acceptanceDetail : selected === 'organize-me' ? organizingDetail : undefined,
+    detail: selected === 'accept-me'
+      ? acceptanceDetail
+      : selected === 'organize-me' ? organizingDetail : selected === 'dispatch-me' ? dispatchableDetail : undefined,
     ...options.remote,
   }
   return {
@@ -104,6 +114,8 @@ function props(options: {
     createIdea: options.createIdea ?? vi.fn().mockResolvedValue(true),
     promoteIdea: options.promoteIdea ?? vi.fn().mockResolvedValue(true),
     organizeTask: options.organizeTask ?? vi.fn().mockResolvedValue(true),
+    loadExecutionPlan: options.loadExecutionPlan ?? vi.fn().mockResolvedValue(undefined),
+    startExecution: options.startExecution ?? vi.fn().mockResolvedValue(true),
     decideAcceptance: options.decideAcceptance ?? vi.fn().mockResolvedValue(true),
     clearError: vi.fn(),
   }
@@ -204,6 +216,56 @@ describe('WorkConsoleRoot', () => {
     await vi.waitFor(() => {
       expect(organizeTask).toHaveBeenCalledWith('organize-me', organizing.revision, 'bug-fix')
     })
+  })
+
+  it('loads execution resources only on demand and submits real P0 two-runner fan-out', async () => {
+    const loadExecutionPlan = vi.fn().mockResolvedValue({
+      dispatchAvailable: true,
+      candidates: [
+        {
+          environmentId: 'env-a', environmentRevision: 7, environmentName: 'worktree-a', nodeId: 'node-a', nodeName: 'PC-A',
+          providers: ['codex'], workspace: { path: '/repo', worktree: '/repo/.worktrees/a' }, available: true, issues: [],
+        },
+        {
+          environmentId: 'env-b', environmentRevision: 9, environmentName: 'worktree-b', nodeId: 'node-b', nodeName: 'PC-B',
+          providers: ['claude-code'], workspace: { path: '/repo', worktree: '/repo/.worktrees/b' }, available: true, issues: [],
+        },
+      ],
+    })
+    const startExecution = vi.fn().mockResolvedValue(true)
+    render(<WorkConsoleRoot {...props({ selected: 'dispatch-me', loadExecutionPlan, startExecution })} />)
+    expect(loadExecutionPlan).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '配置执行' }))
+    await vi.waitFor(() => { expect(loadExecutionPlan).toHaveBeenCalledWith('dispatch-me') })
+    expect(screen.getByRole('button', { name: '+ 并行角色' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '+ 并行角色' }))
+    expect(screen.getByRole('combobox', { name: 'Runner 1' })).toHaveValue('codex')
+    expect(screen.getByRole('combobox', { name: 'Runner 2' })).toHaveValue('claude-code')
+    fireEvent.click(screen.getByRole('button', { name: '启动 2 个 Runner' }))
+    await vi.waitFor(() => {
+      expect(startExecution).toHaveBeenCalledWith('dispatch-me', 5, [
+        { environmentId: 'env-a', environmentRevision: 7, provider: 'codex', role: '完成当前 Stage：方案验证，并返回可验证结果' },
+        { environmentId: 'env-b', environmentRevision: 9, provider: 'claude-code', role: '独立复核当前 Stage，并输出可验证结论' },
+      ])
+    })
+  })
+
+  it('shows resources but hard-disables execution when dispatch Gateway is absent', async () => {
+    const loadExecutionPlan = vi.fn().mockResolvedValue({
+      dispatchAvailable: false,
+      candidates: [{
+        environmentId: 'env-a', environmentRevision: 1, environmentName: 'local-env', nodeId: 'node-a', nodeName: 'PC-A',
+        providers: ['codex'], workspace: { path: '/repo' }, available: true, issues: [],
+      }],
+    })
+    const startExecution = vi.fn().mockResolvedValue(true)
+    render(<WorkConsoleRoot {...props({ selected: 'dispatch-me', loadExecutionPlan, startExecution })} />)
+    fireEvent.click(screen.getByRole('button', { name: '配置执行' }))
+    await screen.findByText(/远程执行 Gateway 未配置/)
+    const start = screen.getByRole('button', { name: '启动执行' })
+    expect(start).toBeDisabled()
+    fireEvent.click(start)
+    expect(startExecution).not.toHaveBeenCalled()
   })
 
   it('shows acceptance controls only after Evidence is opened and passes exact decision coordinates', async () => {

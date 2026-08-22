@@ -239,8 +239,8 @@ describe('WorkConsoleRoot', () => {
     await vi.waitFor(() => { expect(loadExecutionPlan).toHaveBeenCalledWith('dispatch-me') })
     expect(screen.getByRole('button', { name: '+ 并行角色' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '+ 并行角色' }))
-    expect(screen.getByRole('combobox', { name: 'Runner 1' })).toHaveValue('codex')
-    expect(screen.getByRole('combobox', { name: 'Runner 2' })).toHaveValue('claude-code')
+    expect((screen.getByRole('combobox', { name: 'Runner 1' }) as HTMLSelectElement).value).toBe('codex')
+    expect((screen.getByRole('combobox', { name: 'Runner 2' }) as HTMLSelectElement).value).toBe('claude-code')
     fireEvent.click(screen.getByRole('button', { name: '启动 2 个 Runner' }))
     await vi.waitFor(() => {
       expect(startExecution).toHaveBeenCalledWith('dispatch-me', 5, [
@@ -262,8 +262,8 @@ describe('WorkConsoleRoot', () => {
     render(<WorkConsoleRoot {...props({ selected: 'dispatch-me', loadExecutionPlan, startExecution })} />)
     fireEvent.click(screen.getByRole('button', { name: '配置执行' }))
     await screen.findByText(/远程执行 Gateway 未配置/)
-    const start = screen.getByRole('button', { name: '启动执行' })
-    expect(start).toBeDisabled()
+    const start = screen.getByRole('button', { name: '启动执行' }) as HTMLButtonElement
+    expect(start.disabled).toBe(true)
     fireEvent.click(start)
     expect(startExecution).not.toHaveBeenCalled()
   })

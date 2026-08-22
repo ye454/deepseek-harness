@@ -7,7 +7,7 @@
 import { randomUUID } from 'node:crypto'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type { KvTable } from '@deepseek-ai/dsh-storage-domain'
-import type { WorkItemId } from '@deepseek-ai/dsh-work-control'
+import type { TaskWorkItem, WorkItemId } from '@deepseek-ai/dsh-work-control'
 import { workExecutionDomainSpec } from './spec.ts'
 import type { ExecutionThreadRecord } from './spec.ts'
 import type {
@@ -118,7 +118,7 @@ export class WorkExecutionService extends Service {
    * @returns the durable idle thread.
    */
   async createThread(request: CreateExecutionThreadRequest): Promise<ExecutionThread> {
-    this.assertTaskAdmitsExecution(request.taskId)
+    this.requireExecutionTask(request.taskId)
     const now = new Date().toISOString()
     const id = ExecutionThreadId(randomUUID())
     const thread: ExecutionThread = {
@@ -159,6 +159,8 @@ export class WorkExecutionService extends Service {
 
   /**
    * Record an attempt only after the runner has successfully published. One thread owns at most one active attempt.
+   * The current workflow stage is stamped by WorkExecution itself so restart recovery can distinguish an old
+   * completed Stage from the Stage that still needs to run without trusting a browser or remote node coordinate.
    * @param expected - Exact idle thread revision.
    * @param request - Runner provider/mode plus optional DSH subagent session identity.
    * @returns the running thread with a new attempt sequence.
@@ -172,7 +174,7 @@ export class WorkExecutionService extends Service {
       if (current.state !== 'idle' || current.activeAttempt !== undefined) {
         throw new ExecutionThreadTransitionError(`thread '${expected.id}' is not idle`)
       }
-      this.assertTaskAdmitsExecution(current.taskId)
+      const task = this.requireExecutionTask(current.taskId)
       const seq = current.attemptSeq + 1
       return {
         ...withoutBlocker(current),
@@ -183,6 +185,7 @@ export class WorkExecutionService extends Service {
           provider,
           mode: request.mode,
           ...request.subagentSessionId === undefined ? {} : { subagentSessionId: request.subagentSessionId },
+          ...task.currentStageId === undefined ? {} : { stageId: task.currentStageId },
           startedAt: new Date().toISOString(),
         },
       }
@@ -244,7 +247,7 @@ export class WorkExecutionService extends Service {
       if (current.state !== 'blocked') {
         throw new ExecutionThreadTransitionError(`thread '${expected.id}' is not blocked`)
       }
-      this.assertTaskAdmitsExecution(current.taskId)
+      this.requireExecutionTask(current.taskId)
       return { ...withoutBlocker(current), state: 'idle' }
     })
   }
@@ -302,7 +305,7 @@ export class WorkExecutionService extends Service {
     return thread
   }
 
-  private assertTaskAdmitsExecution(taskId: WorkItemId): void {
+  private requireExecutionTask(taskId: WorkItemId): TaskWorkItem {
     const item = this.ctx.workControl.get(taskId)
     if (item === undefined) {
       throw new ExecutionTaskUnavailableError(taskId, 'work item does not exist')
@@ -313,6 +316,7 @@ export class WorkExecutionService extends Service {
     if (item.status !== 'running') {
       throw new ExecutionTaskUnavailableError(taskId, `task status is ${item.status}`)
     }
+    return item
   }
 
   private requireTable(): KvTable<ExecutionThreadId, ExecutionThreadRecord> {

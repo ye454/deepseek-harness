@@ -21,6 +21,7 @@ const activeAttempt = z.object({
   provider: z.string(),
   mode: runnerMode,
   subagentSessionId: sessionId.optional(),
+  stageId: z.string().optional(),
   startedAt: z.string(),
 })
 

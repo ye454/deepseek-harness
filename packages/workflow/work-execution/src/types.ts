@@ -31,6 +31,8 @@ export interface ActiveExecutionAttempt {
   readonly provider: string
   readonly mode: RunnerMode
   readonly subagentSessionId?: SessionId
+  /** Workflow stage current when the runner was durably published. Optional for pre-coordinate records. */
+  readonly stageId?: string
   readonly startedAt: string
 }
 
@@ -58,7 +60,7 @@ export interface CreateExecutionThreadRequest {
   readonly taskId: WorkItemId
 }
 
-/** Record a runner only after that runner has successfully published/started. */
+/** Record a runner only after that runner has successfully published. */
 export interface BeginExecutionAttemptRequest {
   readonly provider: string
   readonly mode: RunnerMode

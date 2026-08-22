@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { DragEvent, ReactNode } from 'react'
 import type {
-  WorkConsoleExecutionCandidate,
   WorkConsoleExecutionPlanSnapshot,
   WorkConsoleExecutionPlacementRequest,
   WorkConsoleIdeaCard,
@@ -488,6 +487,7 @@ function TaskDetail({
   const { card } = detail
   const actionable = actionableUserValidator(detail)
   const [taskType, setTaskType] = useState<WorkConsoleTaskType>('custom')
+  const hasActiveThread = detail.threads.some(thread => thread.state !== 'closed' && thread.state !== 'cancelled')
   return (
     <>
       <div className={css.detailHeader}>
@@ -522,7 +522,7 @@ function TaskDetail({
         </div>
       )}
 
-      {card.status === 'running' && detail.threads.length === 0 && (
+      {card.status === 'running' && !hasActiveThread && (
         <ExecutionPlanner
           key={card.id}
           detail={detail}

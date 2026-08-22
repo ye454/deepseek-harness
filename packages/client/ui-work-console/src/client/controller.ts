@@ -11,8 +11,11 @@ import type {
   OrganizeWorkConsoleTaskRequest,
   PromoteWorkConsoleIdeaRequest,
   PromotedWorkConsoleTask,
+  StartWorkConsoleExecutionRequest,
+  StartedWorkConsoleExecution,
   WorkConsoleAcceptanceDecisionValue,
   WorkConsoleCommandFailure,
+  WorkConsoleExecutionPlanSnapshot,
   WorkConsoleSnapshot,
   WorkConsoleTaskDetail,
 } from '@deepseek-ai/dsh-api-remotes/client'
@@ -100,6 +103,48 @@ export class WorkConsoleController {
     } catch (error) {
       if (epoch !== this.detailEpoch) return this.state.detail
       this.publish({ ...this.state, detailLoading: false, error: renderError(error) })
+      return undefined
+    }
+  }
+
+  /** Load current zero-token scheduler candidates only when execution-plan UI asks for them. */
+  async executionPlan(taskId: string): Promise<WorkConsoleExecutionPlanSnapshot | undefined> {
+    this.publish({ ...this.state, error: undefined })
+    try {
+      const transport = await this.ctx.remote.workConsole.executionPlan(taskId)
+      if (!transport.ok) {
+        this.publish({ ...this.state, error: `workConsole.executionPlan: ${transport.error.code}: ${transport.error.message}` })
+        return undefined
+      }
+      return transport.value
+    } catch (error) {
+      this.publish({ ...this.state, error: renderError(error) })
+      return undefined
+    }
+  }
+
+  /** Queue one explicit one-shot execution plan through the Host orchestrator. */
+  async startExecution(request: StartWorkConsoleExecutionRequest): Promise<StartedWorkConsoleExecution | undefined> {
+    this.publish({ ...this.state, error: undefined })
+    try {
+      const transport = await this.ctx.remote.workConsole.startExecution(request)
+      if (!transport.ok) {
+        this.publish({ ...this.state, error: `workConsole.startExecution: ${transport.error.code}: ${transport.error.message}` })
+        return undefined
+      }
+      if (!transport.value.ok) {
+        const failure = transport.value.error
+        const prefix = failure.code === 'partial-start'
+          ? `执行已部分启动（${failure.started.length} 个已入队）`
+          : failure.code === 'execution-unavailable' ? '执行通道不可用' : '执行计划无效'
+        this.publish({ ...this.state, error: `${prefix}：${failure.reason}` })
+        return undefined
+      }
+      await this.refresh()
+      await this.loadTask(request.taskId)
+      return transport.value.value
+    } catch (error) {
+      this.publish({ ...this.state, error: renderError(error) })
       return undefined
     }
   }

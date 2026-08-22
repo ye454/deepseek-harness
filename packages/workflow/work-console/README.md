@@ -2,7 +2,7 @@
 
 Host projection and explicit human-command boundary for the global continuous-work console.
 
-The package owns no second task database and no polling cache. Reads are derived from the current Work Control, ExecutionThread, WorkNode, WorkEnvironment, and WorkValidation authorities. Writes delegate to Work Control / WorkValidation rather than mutating their durable records directly.
+The package owns no second task database and no polling cache. Reads are derived from the current Work Control, ExecutionThread, WorkNode, WorkEnvironment, WorkValidation, and optional WorkOrchestrator authorities. Writes delegate to those owning services rather than mutating their durable records directly.
 
 ## Remote surface
 
@@ -16,10 +16,19 @@ The package owns no second task database and no polling cache. Reads are derived
 
 `workConsole.task(taskId)` expands one Task on demand with its ExecutionThreads, exact Environment bindings, workspace/runtime facts, and current Validation Generation Evidence references.
 
-Two explicit write methods share the same Host-owned namespace:
+`workConsole.executionPlan(taskId)` is also on demand. It returns current zero-token scheduler candidates only for an organized `running` Task that owns no nonterminal ExecutionThread. Each candidate carries its exact Environment revision, Node, advertised Runner providers, workspace/worktree facts, lease state, and compact availability issues. It never starts a Runner.
 
-- `workConsole.promoteIdea({ id, revision, priority? })` moves one passive Idea to `organizing`. It does **not** start a model, Runner, ExecutionThread, or Environment.
-- `workConsole.decideAcceptance({ taskId, taskRevision, generation, validatorIndex, decision })` records one required human acceptance/return decision after required automated validators are satisfied.
+Explicit writes share the same Host-owned namespace:
+
+- `workConsole.createIdea(...)` records one passive Idea only;
+- `workConsole.promoteIdea({ id, revision, priority? })` moves one passive Idea to `organizing`;
+- `workConsole.organizeTask(...)` commits a human-selected deterministic Workflow/Validation template;
+- `workConsole.startExecution(...)` submits an explicit Environment revision + Runner provider + role plan to WorkOrchestrator;
+- `workConsole.decideAcceptance(...)` records one required human acceptance/return decision after required automated validators are satisfied.
+
+Idea capture, promotion and organization do **not** start a model, Runner, ExecutionThread, or Environment. Execution begins only after an explicit `startExecution` request is accepted by the Orchestrator.
+
+WorkOrchestrator is an optional capability from the Work Console package's perspective. Without it, the original Idea/Task/Acceptance console remains usable and execution-plan reads report no dispatch capability. In the default Web bundle, the config-free Orchestrator resource projection is mounted; remote Gateway transport is still deployment-optional.
 
 The browser never supplies an acceptance actor. V1 derives a `harness-home:<anonymous-user-id>` audit actor on the Host. This is deliberately described as a local harness-home audit identity, **not** as multi-user authentication; a future authenticated identity resolver can replace that Host policy without adding an actor field to browser requests.
 
@@ -33,7 +42,21 @@ The Host retains stable operational Task status (`unclaimed | running | blocked 
 
 `想法区 | 执行区 | 验收区`
 
-Task-specific Workflow Stage remains separate from those product zones.
+Task-specific Workflow Stage remains separate from those product zones. Runner/Environment execution-plan controls stay inside Task Detail rather than expanding the homepage into a resource cockpit.
+
+## Execution routing
+
+Execution plans are explicit rather than inferred from Task prose.
+
+- P1/P2 submit exactly one Environment/Runner/role placement.
+- P0 may submit up to three independent placements.
+- Every placement pins an exact current Environment revision.
+- Parallel roles must pass the Orchestrator's workspace/worktree isolation and lease checks.
+- Candidate discovery and execution submission are separate operations; the Orchestrator revalidates all facts at dispatch time.
+- Successful submission means durable remote commands were queued. A Runner is not shown as running until the node daemon actually publishes/acknowledges the attempt.
+- A partial fan-out is reported truthfully with the already-queued placements and failed index; it is not presented as an atomic rollback.
+
+Closed/cancelled historical ExecutionThreads do not permanently block a Task from a later fresh dispatch. Nonterminal threads do.
 
 ## Acceptance routing
 
@@ -54,4 +77,4 @@ Expected stale/missing/not-ready conditions return typed business failures. Stor
 
 Runner availability is derived from WorkNodes that actually advertise each provider. Environment state is derived from WorkEnvironment. Native-resume capability is not inferred from a provider name; WorkNode capability facts remain authoritative.
 
-P0 is sorted ahead of P1/P2. No percentage progress is fabricated. Opening, filtering, promoting an Idea, or recording a human acceptance decision adds zero direct model tokens. Model tokens begin only when a later execution/orchestration action actually invokes a Runner.
+P0 is sorted ahead of P1/P2. No percentage progress is fabricated. Opening, filtering, capturing/promoting/organizing an Idea, reading execution candidates, or recording a human acceptance decision adds zero direct model tokens. Model tokens begin only when an execution action reaches a real Runner.

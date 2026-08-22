@@ -67,6 +67,9 @@ export function apply(ctx: ClientContext): void {
       await controller.loadTask(taskId)
       return true
     },
+    loadExecutionPlan: async taskId => await controller.executionPlan(taskId),
+    startExecution: async (taskId, taskRevision, placements) =>
+      (await controller.startExecution({ taskId, taskRevision, placements })) !== undefined,
     decideAcceptance: async (taskId, taskRevision, generation, validatorIndex, decision) => {
       const value = await controller.decideAcceptance({
         taskId,

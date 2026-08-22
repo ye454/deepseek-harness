@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { DragEvent, ReactNode } from 'react'
 import type {
+  WorkConsoleExecutionPlanSnapshot,
+  WorkConsoleExecutionPlacementRequest,
   WorkConsoleIdeaCard,
   WorkConsoleSnapshot,
   WorkConsoleTaskCard,
@@ -44,6 +46,8 @@ export function WorkConsoleRoot({
   createIdea,
   promoteIdea,
   organizeTask,
+  loadExecutionPlan,
+  startExecution,
   decideAcceptance,
   clearError,
 }: WorkConsoleRootProps) {
@@ -151,7 +155,7 @@ export function WorkConsoleRoot({
               <h1 className={css.title}>持续工作控制台</h1>
               <span className={css.readOnly}>V1</span>
             </div>
-            <p className={css.subtitle}>想法沉淀 → 人工组织 → 持续执行 → AI 验收后人工确认</p>
+            <p className={css.subtitle}>想法沉淀 → 人工组织 → 持续执行 → 自动验收后按策略人工确认</p>
           </div>
           <div className={css.headerActions}>
             <button type="button" className={css.secondaryButton} onClick={() => { setCaptureOpen(value => !value) }}>
@@ -237,6 +241,8 @@ export function WorkConsoleRoot({
             organizationBusy={busyKey === `organize:${selectedTaskId}`}
             onDecision={runDecision}
             onOrganize={runOrganization}
+            onLoadExecutionPlan={loadExecutionPlan}
+            onStartExecution={startExecution}
             onClose={() => { actions.selectTask(null) }}
           />
         )}
@@ -402,7 +408,17 @@ function Fact({ label, value, warning = false }: { readonly label: string; reado
   return <span className={`${css.fact} ${warning ? css.factWarning : ''}`}><small>{label}</small>{value}</span>
 }
 
-function TaskDetailDrawer({ detail, loading, decisionBusy, organizationBusy, onDecision, onOrganize, onClose }: {
+function TaskDetailDrawer({
+  detail,
+  loading,
+  decisionBusy,
+  organizationBusy,
+  onDecision,
+  onOrganize,
+  onLoadExecutionPlan,
+  onStartExecution,
+  onClose,
+}: {
   readonly detail: WorkConsoleTaskDetail | undefined
   readonly loading: boolean
   readonly decisionBusy: boolean
@@ -413,6 +429,12 @@ function TaskDetailDrawer({ detail, loading, decisionBusy, organizationBusy, onD
     decision: 'accept' | 'return',
   ) => Promise<void>
   readonly onOrganize: (detail: WorkConsoleTaskDetail, taskType: WorkConsoleTaskType) => Promise<void>
+  readonly onLoadExecutionPlan: (taskId: string) => Promise<WorkConsoleExecutionPlanSnapshot | undefined>
+  readonly onStartExecution: (
+    taskId: string,
+    taskRevision: number,
+    placements: readonly WorkConsoleExecutionPlacementRequest[],
+  ) => Promise<boolean>
   readonly onClose: () => void
 }) {
   return (
@@ -421,13 +443,31 @@ function TaskDetailDrawer({ detail, loading, decisionBusy, organizationBusy, onD
         <button type="button" className={css.drawerClose} aria-label="关闭 Task Detail" onClick={onClose}>×</button>
         {detail === undefined ? (
           <div className={css.detailEmpty}>{loading ? '正在读取 Task Detail…' : 'Task Detail 暂不可用'}</div>
-        ) : <TaskDetail detail={detail} decisionBusy={decisionBusy} organizationBusy={organizationBusy} onDecision={onDecision} onOrganize={onOrganize} />}
+        ) : (
+          <TaskDetail
+            detail={detail}
+            decisionBusy={decisionBusy}
+            organizationBusy={organizationBusy}
+            onDecision={onDecision}
+            onOrganize={onOrganize}
+            onLoadExecutionPlan={onLoadExecutionPlan}
+            onStartExecution={onStartExecution}
+          />
+        )}
       </aside>
     </div>
   )
 }
 
-function TaskDetail({ detail, decisionBusy, organizationBusy, onDecision, onOrganize }: {
+function TaskDetail({
+  detail,
+  decisionBusy,
+  organizationBusy,
+  onDecision,
+  onOrganize,
+  onLoadExecutionPlan,
+  onStartExecution,
+}: {
   readonly detail: WorkConsoleTaskDetail
   readonly decisionBusy: boolean
   readonly organizationBusy: boolean
@@ -437,10 +477,17 @@ function TaskDetail({ detail, decisionBusy, organizationBusy, onDecision, onOrga
     decision: 'accept' | 'return',
   ) => Promise<void>
   readonly onOrganize: (detail: WorkConsoleTaskDetail, taskType: WorkConsoleTaskType) => Promise<void>
+  readonly onLoadExecutionPlan: (taskId: string) => Promise<WorkConsoleExecutionPlanSnapshot | undefined>
+  readonly onStartExecution: (
+    taskId: string,
+    taskRevision: number,
+    placements: readonly WorkConsoleExecutionPlacementRequest[],
+  ) => Promise<boolean>
 }) {
   const { card } = detail
   const actionable = actionableUserValidator(detail)
   const [taskType, setTaskType] = useState<WorkConsoleTaskType>('custom')
+  const hasActiveThread = detail.threads.some(thread => thread.state !== 'closed' && thread.state !== 'cancelled')
   return (
     <>
       <div className={css.detailHeader}>
@@ -473,6 +520,15 @@ function TaskDetail({ detail, decisionBusy, organizationBusy, onDecision, onOrga
             </button>
           </div>
         </div>
+      )}
+
+      {card.status === 'running' && !hasActiveThread && (
+        <ExecutionPlanner
+          key={card.id}
+          detail={detail}
+          onLoad={onLoadExecutionPlan}
+          onStart={onStartExecution}
+        />
       )}
 
       {actionable !== undefined && detail.validationGeneration !== undefined && (
@@ -546,6 +602,181 @@ function TaskDetail({ detail, decisionBusy, organizationBusy, onDecision, onOrga
       </DetailSection>
     </>
   )
+}
+
+interface DraftPlacement {
+  readonly environmentId: string
+  readonly provider: string
+  readonly role: string
+}
+
+function ExecutionPlanner({ detail, onLoad, onStart }: {
+  readonly detail: WorkConsoleTaskDetail
+  readonly onLoad: (taskId: string) => Promise<WorkConsoleExecutionPlanSnapshot | undefined>
+  readonly onStart: (
+    taskId: string,
+    taskRevision: number,
+    placements: readonly WorkConsoleExecutionPlacementRequest[],
+  ) => Promise<boolean>
+}) {
+  const [plan, setPlan] = useState<WorkConsoleExecutionPlanSnapshot | undefined>()
+  const [loading, setLoading] = useState(false)
+  const [starting, setStarting] = useState(false)
+  const [placements, setPlacements] = useState<readonly DraftPlacement[]>([])
+  const available = plan?.candidates.filter(candidate => candidate.available && candidate.providers.length > 0) ?? []
+
+  const load = async (): Promise<void> => {
+    if (loading) return
+    setLoading(true)
+    try {
+      const next = await onLoad(detail.card.id)
+      setPlan(next)
+      const first = next?.candidates.find(candidate => candidate.available && candidate.providers.length > 0)
+      setPlacements(first === undefined ? [] : [{
+        environmentId: first.environmentId,
+        provider: first.providers[0]!,
+        role: defaultExecutionRole(detail),
+      }])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const updatePlacement = (index: number, patch: Partial<DraftPlacement>): void => {
+    setPlacements(current => current.map((placement, candidateIndex) => {
+      if (candidateIndex !== index) return placement
+      const next = { ...placement, ...patch }
+      if (patch.environmentId !== undefined) {
+        const candidate = plan?.candidates.find(value => value.environmentId === patch.environmentId)
+        next.provider = candidate?.providers[0] ?? ''
+      }
+      return next
+    }))
+  }
+
+  const addParallel = (): void => {
+    if (detail.card.priority !== 'p0' || placements.length >= 3) return
+    const used = new Set(placements.map(placement => placement.environmentId))
+    const candidate = available.find(value => !used.has(value.environmentId))
+    if (candidate === undefined) return
+    setPlacements(current => [...current, {
+      environmentId: candidate.environmentId,
+      provider: candidate.providers[0]!,
+      role: '独立复核当前 Stage，并输出可验证结论',
+    }])
+  }
+
+  const start = async (): Promise<void> => {
+    if (plan === undefined || !plan.dispatchAvailable || starting) return
+    const requests = placements.map(placement => {
+      const candidate = plan.candidates.find(value => value.environmentId === placement.environmentId)
+      return candidate === undefined ? undefined : {
+        environmentId: candidate.environmentId,
+        environmentRevision: candidate.environmentRevision,
+        provider: placement.provider,
+        role: placement.role.trim(),
+      }
+    }).filter((value): value is WorkConsoleExecutionPlacementRequest => value !== undefined)
+    if (requests.length !== placements.length || requests.some(request => request.provider === '' || request.role === '')) return
+    setStarting(true)
+    try {
+      await onStart(detail.card.id, detail.card.revision, requests)
+    } finally {
+      setStarting(false)
+    }
+  }
+
+  if (plan === undefined) {
+    return (
+      <div className={css.acceptanceActions}>
+        <div>
+          <strong>启动执行</strong>
+          <span>按需读取当前 Environment / Runner 事实；不会自动猜测工作区，也不会自动启动。</span>
+        </div>
+        <button type="button" className={css.acceptButton} disabled={loading} onClick={() => { void load() }}>
+          {loading ? '读取中…' : '配置执行'}
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <DetailSection title="执行计划">
+      {!plan.dispatchAvailable && <div className={css.detailWarning}>远程执行 Gateway 未配置；可以查看资源，但当前不能启动 Runner。</div>}
+      {available.length === 0 && <div className={css.detailWarning}>当前没有同时满足 Node / Environment / Runner / workspace 租约要求的执行资源。</div>}
+      <div className={css.detailList}>
+        {placements.map((placement, index) => {
+          const candidate = plan.candidates.find(value => value.environmentId === placement.environmentId)
+          return (
+            <div key={`${index}:${placement.environmentId}`} className={css.detailRow}>
+              <div><strong>角色 {index + 1}</strong><span>{candidate?.nodeName ?? candidate?.nodeId ?? '未选择节点'}</span></div>
+              <label className={css.selectWrap}>
+                <span className={css.srOnly}>执行环境 {index + 1}</span>
+                <select
+                  aria-label={`执行环境 ${index + 1}`}
+                  value={placement.environmentId}
+                  onChange={event => { updatePlacement(index, { environmentId: event.currentTarget.value }) }}
+                >
+                  {available.map(value => (
+                    <option key={value.environmentId} value={value.environmentId}>
+                      {value.environmentName} · {value.workspace.worktree ?? value.workspace.path}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={css.selectWrap}>
+                <span className={css.srOnly}>Runner {index + 1}</span>
+                <select
+                  aria-label={`Runner ${index + 1}`}
+                  value={placement.provider}
+                  onChange={event => { updatePlacement(index, { provider: event.currentTarget.value }) }}
+                >
+                  {(candidate?.providers ?? []).map(provider => <option key={provider} value={provider}>{provider}</option>)}
+                </select>
+              </label>
+              <input
+                className={css.search}
+                aria-label={`执行角色 ${index + 1}`}
+                value={placement.role}
+                placeholder="该 Runner 的明确职责"
+                onChange={event => { updatePlacement(index, { role: event.currentTarget.value }) }}
+              />
+              {detail.card.priority === 'p0' && placements.length > 1 && (
+                <button type="button" onClick={() => { setPlacements(current => current.filter((_, candidateIndex) => candidateIndex !== index)) }}>移除</button>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      <div className={css.acceptanceActions}>
+        <div>
+          <strong>{detail.card.priority === 'p0' ? 'P0 可并行' : '单 Runner 执行'}</strong>
+          <span>{detail.card.priority === 'p0' ? '最多 3 个独立 Environment/worktree；Orchestrator 会再次检查租约冲突。' : 'P1/P2 固定只允许一个 ExecutionThread。'}</span>
+        </div>
+        <div>
+          {detail.card.priority === 'p0' && placements.length < 3 && available.length > placements.length && (
+            <button type="button" disabled={starting} onClick={addParallel}>+ 并行角色</button>
+          )}
+          <button
+            type="button"
+            className={css.acceptButton}
+            disabled={starting || !plan.dispatchAvailable || placements.length === 0 || placements.some(value => value.provider === '' || value.role.trim() === '')}
+            onClick={() => { void start() }}
+          >
+            {starting ? '入队中…' : placements.length > 1 ? `启动 ${placements.length} 个 Runner` : '启动执行'}
+          </button>
+        </div>
+      </div>
+      {plan.candidates.some(candidate => !candidate.available) && (
+        <div className={css.muted}>不可用资源已隐藏；详细原因由资源中心展示。</div>
+      )}
+    </DetailSection>
+  )
+}
+
+function defaultExecutionRole(detail: WorkConsoleTaskDetail): string {
+  const stage = detail.card.stage?.title
+  return stage === undefined ? '执行当前 Task，并返回可验证结果' : `完成当前 Stage：${stage}，并返回可验证结果`
 }
 
 function DetailSection({ title, children }: { readonly title: string; readonly children: ReactNode }) {

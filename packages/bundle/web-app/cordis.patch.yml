@@ -75,6 +75,11 @@
     - id: work-environment
       name: '@deepseek-ai/dsh-work-environment'
 
+    # Scheduler/resource projection is always available; remote dispatch stays
+    # optional until a work-node Gateway is mounted by deployment configuration.
+    - id: work-orchestrator
+      name: '@deepseek-ai/dsh-work-orchestrator'
+
     - id: work-validation
       name: '@deepseek-ai/dsh-work-validation'
 

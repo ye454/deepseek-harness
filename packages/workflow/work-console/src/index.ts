@@ -10,10 +10,17 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { WorkItemId, type IdeaWorkItem, type TaskWorkItem } from '@deepseek-ai/dsh-work-control'
 import type { ExecutionThread } from '@deepseek-ai/dsh-work-execution'
 import type { WorkEnvironment } from '@deepseek-ai/dsh-work-environment'
+import type { WorkOrchestrator } from '@deepseek-ai/dsh-work-orchestrator'
 import type { WorkValidatorResult } from '@deepseek-ai/dsh-work-validation'
 // Typert-generated ./typert and ./remote artifacts import Zod at runtime.
 import type {} from 'zod'
 import { decideWorkConsoleAcceptance, promoteWorkConsoleIdea } from './commands.ts'
+import { startWorkConsoleExecution } from './execution-commands.ts'
+import type {
+  StartWorkConsoleExecutionRequest,
+  StartWorkConsoleExecutionResult,
+  WorkConsoleExecutionPlanSnapshot,
+} from './execution-types.ts'
 import { createWorkConsoleIdea, organizeWorkConsoleTask } from './intake-commands.ts'
 import type {
   CreateWorkConsoleIdeaRequest,
@@ -46,6 +53,7 @@ import type {
 
 export type * from './types.ts'
 export type * from './intake-types.ts'
+export type * from './execution-types.ts'
 
 /** Host Remote used by the browser work-console surface. */
 export class WorkConsoleGateway extends TypertRemoteService {
@@ -77,6 +85,50 @@ export class WorkConsoleGateway extends TypertRemoteService {
   @Remote('decideAcceptance')
   decideAcceptance(request: DecideWorkConsoleAcceptanceRequest): Promise<DecideWorkConsoleAcceptanceResult> {
     return decideWorkConsoleAcceptance(this.ctx, request)
+  }
+
+  /** Read zero-token execution candidates only while the Task is eligible for a fresh dispatch. */
+  @Remote('executionPlan')
+  executionPlan(rawTaskId: string): WorkConsoleExecutionPlanSnapshot | undefined {
+    const taskId = WorkItemId(rawTaskId)
+    const item = this.ctx.workControl.get(taskId)
+    if (item?.kind !== 'task' || item.status !== 'running' || item.workflow === undefined || item.currentStageId === undefined) {
+      return undefined
+    }
+    const activeThreads = this.ctx.workExecution.list(taskId)
+      .filter(thread => thread.state !== 'closed' && thread.state !== 'cancelled')
+    if (activeThreads.length > 0) return undefined
+
+    const orchestrator = optionalOrchestrator(this.ctx)
+    if (orchestrator === undefined) return { dispatchAvailable: false, candidates: [] }
+    const snapshot = orchestrator.listCandidates()
+    return {
+      dispatchAvailable: snapshot.dispatchAvailable,
+      candidates: snapshot.candidates.map(candidate => ({
+        environmentId: String(candidate.environmentId),
+        environmentRevision: candidate.environmentRevision,
+        environmentName: candidate.environmentName,
+        nodeId: String(candidate.nodeId),
+        ...(candidate.nodeName === undefined ? {} : { nodeName: candidate.nodeName }),
+        providers: [...candidate.providers],
+        workspace: {
+          path: candidate.workspace.path,
+          ...(candidate.workspace.worktree === undefined ? {} : { worktree: candidate.workspace.worktree }),
+          ...(candidate.workspace.repository === undefined ? {} : { repository: candidate.workspace.repository }),
+          ...(candidate.workspace.branch === undefined ? {} : { branch: candidate.workspace.branch }),
+          ...(candidate.workspace.dirty === undefined ? {} : { dirty: candidate.workspace.dirty }),
+        },
+        ...(candidate.leasedByThreadId === undefined ? {} : { leasedByThreadId: String(candidate.leasedByThreadId) }),
+        available: candidate.available,
+        issues: [...candidate.issues],
+      })),
+    }
+  }
+
+  /** Queue one explicit one-shot execution plan; P0 fan-out remains isolated by the Orchestrator. */
+  @Remote('startExecution')
+  startExecution(request: StartWorkConsoleExecutionRequest): Promise<StartWorkConsoleExecutionResult> {
+    return startWorkConsoleExecution(this.ctx, request)
   }
 
   /**
@@ -198,6 +250,10 @@ export class WorkConsoleGateway extends TypertRemoteService {
       runners: runnerRows,
     }
   }
+}
+
+function optionalOrchestrator(ctx: Context): WorkOrchestrator | undefined {
+  return (ctx as unknown as { readonly workOrchestrator?: WorkOrchestrator }).workOrchestrator
 }
 
 function ideaCard(idea: IdeaWorkItem): WorkConsoleIdeaCard {

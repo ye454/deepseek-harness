@@ -29,7 +29,7 @@ export type WorkCoordinationState = 'ignored' | 'waiting' | 'continued' | 'valid
 export interface WorkCoordinationResult {
   readonly taskId: WorkItemId
   readonly state: WorkCoordinationState
-  readonly stageId?: string
+  readonly stageId?: string | undefined
   readonly reason?: string
   readonly continuation?: ContinueWorkThreadResult
 }
@@ -117,7 +117,16 @@ export class WorkExecutionCoordinator extends Service {
     const item = this.ctx.workControl.get(taskId)
     if (item === undefined || item.kind !== 'task') return { taskId, state: 'ignored', reason: 'task-missing' }
 
-    if (item.status === 'validation' || item.status === 'done' || item.status === 'cancelled') {
+    if (item.status === 'validation') {
+      if (item.validation?.state === 'passed' && !hasRequiredUserAcceptance(item)) {
+        const done = await this.ctx.workControl.setStatus({ id: item.id, revision: item.revision }, 'done')
+        await this.cleanupTerminalThreads(done)
+        return { taskId, state: 'ignored', stageId: done.currentStageId, reason: 'validation-passed-automatically' }
+      }
+      await this.cleanupTerminalThreads(item)
+      return { taskId, state: 'ignored', stageId: item.currentStageId, reason: 'task-validation' }
+    }
+    if (item.status === 'done' || item.status === 'cancelled') {
       await this.cleanupTerminalThreads(item)
       return { taskId, state: 'ignored', reason: `task-${item.status}` }
     }
@@ -377,6 +386,11 @@ function choosePrimary(threads: readonly ExecutionThread[]): ExecutionThread {
   const primary = ordered[0]
   if (primary === undefined) throw new WorkExecutionCoordinatorError('cannot choose primary from an empty thread set')
   return primary
+}
+
+function hasRequiredUserAcceptance(task: TaskWorkItem): boolean {
+  return (task.validationPolicy?.validators ?? []).some(validator =>
+    validator.kind === 'user-acceptance' && validator.requirement === 'required')
 }
 
 function threadFailureAtOrBeforeStage(thread: ExecutionThread, currentStageId: string): string | undefined {

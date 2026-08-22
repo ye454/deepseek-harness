@@ -5,6 +5,7 @@ import { WorkEnvironmentId } from '@deepseek-ai/dsh-work-environment'
 import {
   WorkOrchestratorError,
   WorkOrchestratorPartialStartError,
+  type WorkOrchestrator,
 } from '@deepseek-ai/dsh-work-orchestrator'
 import type {
   StartWorkConsoleExecutionRequest,
@@ -17,8 +18,12 @@ export async function startWorkConsoleExecution(
   ctx: Context,
   request: StartWorkConsoleExecutionRequest,
 ): Promise<StartWorkConsoleExecutionResult> {
+  const orchestrator = optionalOrchestrator(ctx)
+  if (orchestrator === undefined) {
+    return { ok: false, error: { code: 'execution-unavailable', reason: 'work orchestrator is not configured' } }
+  }
   try {
-    const result = await ctx.workOrchestrator.startTask({
+    const result = await orchestrator.startTask({
       taskId: WorkItemId(request.taskId),
       taskRevision: request.taskRevision,
       placements: request.placements.map(placement => ({
@@ -58,6 +63,10 @@ export async function startWorkConsoleExecution(
     }
     throw error
   }
+}
+
+function optionalOrchestrator(ctx: Context): WorkOrchestrator | undefined {
+  return (ctx as unknown as { readonly workOrchestrator?: WorkOrchestrator }).workOrchestrator
 }
 
 function projectStarted(value: {

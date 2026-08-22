@@ -10,6 +10,7 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { WorkItemId, type IdeaWorkItem, type TaskWorkItem } from '@deepseek-ai/dsh-work-control'
 import type { ExecutionThread } from '@deepseek-ai/dsh-work-execution'
 import type { WorkEnvironment } from '@deepseek-ai/dsh-work-environment'
+import type { WorkOrchestrator } from '@deepseek-ai/dsh-work-orchestrator'
 import type { WorkValidatorResult } from '@deepseek-ai/dsh-work-validation'
 // Typert-generated ./typert and ./remote artifacts import Zod at runtime.
 import type {} from 'zod'
@@ -56,7 +57,7 @@ export type * from './execution-types.ts'
 
 /** Host Remote used by the browser work-console surface. */
 export class WorkConsoleGateway extends TypertRemoteService {
-  static inject = ['workControl', 'workExecution', 'workNodes', 'workEnvironments', 'workValidation', 'workOrchestrator']
+  static inject = ['workControl', 'workExecution', 'workNodes', 'workEnvironments', 'workValidation']
 
   constructor(ctx: Context) {
     super(ctx, 'workConsole')
@@ -98,7 +99,9 @@ export class WorkConsoleGateway extends TypertRemoteService {
       .filter(thread => thread.state !== 'closed' && thread.state !== 'cancelled')
     if (activeThreads.length > 0) return undefined
 
-    const snapshot = this.ctx.workOrchestrator.listCandidates()
+    const orchestrator = optionalOrchestrator(this.ctx)
+    if (orchestrator === undefined) return { dispatchAvailable: false, candidates: [] }
+    const snapshot = orchestrator.listCandidates()
     return {
       dispatchAvailable: snapshot.dispatchAvailable,
       candidates: snapshot.candidates.map(candidate => ({
@@ -247,6 +250,10 @@ export class WorkConsoleGateway extends TypertRemoteService {
       runners: runnerRows,
     }
   }
+}
+
+function optionalOrchestrator(ctx: Context): WorkOrchestrator | undefined {
+  return (ctx as unknown as { readonly workOrchestrator?: WorkOrchestrator }).workOrchestrator
 }
 
 function ideaCard(idea: IdeaWorkItem): WorkConsoleIdeaCard {

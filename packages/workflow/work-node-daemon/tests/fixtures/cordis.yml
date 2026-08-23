@@ -1,0 +1,73 @@
+- id: storage
+  name: '@deepseek-ai/dsh-storage'
+
+- id: storage-json
+  name: '@deepseek-ai/dsh-storage-json'
+  config:
+    root: .work-node-daemon-store
+
+- id: storage-domain
+  name: '@deepseek-ai/dsh-storage-domain'
+  config:
+    backend: json
+
+- id: credentials
+  name: '@deepseek-ai/dsh-credentials-local'
+  config:
+    watch: false
+
+- id: subprocess
+  name: '@deepseek-ai/dsh-subprocess-local'
+
+- id: webserver
+  name: '@deepseek-ai/dsh-host-webserver'
+  config:
+    host: 127.0.0.1
+    port: !!js "Number(process.env.WORK_NODE_DAEMON_TEST_PORT)"
+
+- id: work-control
+  name: '@deepseek-ai/dsh-work-control'
+
+- id: work-execution
+  name: '@deepseek-ai/dsh-work-execution'
+
+- id: work-node
+  name: '@deepseek-ai/dsh-work-node'
+
+- id: work-environment
+  name: '@deepseek-ai/dsh-work-environment'
+
+- id: work-node-gateway
+  name: '@deepseek-ai/dsh-work-node-gateway'
+  config:
+    nodes:
+      pc2: WORK_NODE_DAEMON_TEST_SECRET
+    maxRequestBodyBytes: 65536
+    maxPromptBytes: 16384
+    maxCommandsPerPoll: 8
+    maxClockSkewMs: 30000
+    heartbeatTimeoutMs: 10000
+    sweepIntervalMs: 1000
+
+- id: work-node-daemon
+  name: '@deepseek-ai/dsh-work-node-daemon'
+  config:
+    gatewayUrl: !!js "'http://127.0.0.1:' + process.env.WORK_NODE_DAEMON_TEST_PORT"
+    nodeKey: pc2
+    nodeName: Loader Worker
+    credential: WORK_NODE_DAEMON_TEST_SECRET
+    protocolVersion: 1
+    pollIntervalMs: 20
+    retryDelayMs: 20
+    requestTimeoutMs: 2000
+    maxConcurrentRuns: 1
+    gitCommand: git
+    environmentCommandOutputBytes: 16384
+    processGraceMs: 500
+    environments:
+      - key: main
+        name: Loader Workspace
+        workspacePath: !!js "process.env.WORK_NODE_DAEMON_TEST_WORKSPACE"
+        capabilities: []
+        devices: []
+        secretRefs: []

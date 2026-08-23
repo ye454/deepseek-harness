@@ -1,0 +1,24 @@
+- id: storage
+  name: '@deepseek-ai/dsh-storage'
+
+- id: storage-json
+  name: '@deepseek-ai/dsh-storage-json'
+  config:
+    root: .work-environment-store
+
+- id: storage-domain
+  name: '@deepseek-ai/dsh-storage-domain'
+  config:
+    backend: json
+
+- id: work-control
+  name: '@deepseek-ai/dsh-work-control'
+
+- id: work-execution
+  name: '@deepseek-ai/dsh-work-execution'
+
+- id: work-node
+  name: '@deepseek-ai/dsh-work-node'
+
+- id: work-environment
+  name: '@deepseek-ai/dsh-work-environment'

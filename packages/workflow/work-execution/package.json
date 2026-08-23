@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-work-execution",
-  "description": "Durable execution-thread domain for runner attempts attached to global work-control tasks",
+  "description": "Internal durable execution-thread module for dsh-work-console",
   "version": "0.1.0-rc.5",
   "private": true,
   "type": "module",
@@ -15,21 +15,14 @@
       "types": "./lib/types/invariant.d.ts",
       "default": "./lib/invariant.js"
     },
-    "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
   "files": [
     "lib/index.js",
     "lib/invariant.js",
-    "cordis.patch.yml",
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",
-  "dsh": {
-    "bundle": {
-      "patch": "./cordis.patch.yml"
-    }
-  },
   "dependencies": {
     "zod": "^4.4.3"
   },

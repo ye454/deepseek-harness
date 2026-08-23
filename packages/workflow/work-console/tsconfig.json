@@ -16,6 +16,7 @@
     { "path": "../work-node" },
     { "path": "../work-environment" },
     { "path": "../work-orchestrator" },
-    { "path": "../work-validation" }
+    { "path": "../work-validation" },
+    { "path": "../work-execution-coordinator" }
   ]
 }

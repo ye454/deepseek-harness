@@ -6,7 +6,7 @@
 
 该页列出所有非空白会话，包括已归档会话和子代理会话。每行显示标题、工作区（或未分组）、输入、输出与合计。标题／工作区搜索与最少合计筛选只在本地生效。打开一行会调用 `ctx.sessions.open` 并关闭设置。**导出 CSV** 和 **导出 JSON** 下载当前可见行；CSV 列为 title、workspace、sessionId、input、output、cacheRead、cacheWrite、total 和 updatedAt。
 
-token 数量的紧凑拼写使用 [`dsh-token-meter`](../../llm/token-meter/README.md) 的 `formatCompactTokens`。注册使用 `ctx.slots.inject()`，因此能跟随分区 slot 的延迟声明、重新声明、本地化变化与 teardown。
+token 数量的紧凑拼写使用 [`dsh-token-meter`](../../llm/token-meter/README.zh.md) 的 `formatCompactTokens`。注册使用 `ctx.slots.inject()`，因此能跟随分区 slot 的延迟声明、重新声明、本地化变化与 teardown。
 
 ## 模型体验
 

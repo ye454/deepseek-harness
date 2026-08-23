@@ -21,7 +21,7 @@ Do not remove existing untracked build output, redesign the Work Console archite
 - [x] Work Console source, package metadata, tests, and client remote types use the consolidated package.
 - [x] Focused Work Console tests pass without disabling cases.
 - [x] Relevant TypeScript, package invariant, and startup checks pass; remaining workspace constraint failures are explicitly documented.
-- [ ] Only intentional files are committed and pushed to the current `origin` branch.
+- [x] Only intentional files are committed and pushed to the current `origin` branch.
 
 ## Stop conditions
 

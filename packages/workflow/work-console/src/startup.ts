@@ -1,18 +1,17 @@
 /**
  * Single external DSH plugin boundary for the continuous-work system.
  *
- * The Work subsystem is one installable bundle. Domain services stay split into
- * focused internal modules, but they are mounted as child Cordis plugins owned
- * by this one root fiber instead of being installed as independent DSH bundles.
+ * The Work subsystem is one installable bundle. Domain services live under
+ * this package and are mounted as child Cordis plugins owned by this root fiber.
  */
 import type { Context } from '@deepseek-ai/cordis'
-import WorkControl from '@deepseek-ai/dsh-work-control'
-import WorkEnvironment from '@deepseek-ai/dsh-work-environment'
-import WorkExecution from '@deepseek-ai/dsh-work-execution'
-import WorkExecutionCoordinator from '@deepseek-ai/dsh-work-execution-coordinator'
-import WorkNode from '@deepseek-ai/dsh-work-node'
-import WorkOrchestrator from '@deepseek-ai/dsh-work-orchestrator'
-import WorkValidation from '@deepseek-ai/dsh-work-validation'
+import WorkControl from './internal/control/index.ts'
+import WorkEnvironment from './internal/environment/index.ts'
+import WorkExecution from './internal/execution/index.ts'
+import WorkExecutionCoordinator from './internal/execution-coordinator/index.ts'
+import WorkNode from './internal/node/index.ts'
+import WorkOrchestrator from './internal/orchestrator/index.ts'
+import WorkValidation from './internal/validation/index.ts'
 import { WorkConsoleGateway } from './index.ts'
 
 export * from './index.ts'

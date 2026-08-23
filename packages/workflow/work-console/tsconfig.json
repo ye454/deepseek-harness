@@ -2,7 +2,34 @@
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "lib/types"
+    "outDir": "lib/types",
+    "baseUrl": ".",
+    "paths": {
+      "@deepseek-ai/dsh-work-control": ["src/internal/control/index.ts"],
+      "@deepseek-ai/dsh-work-control/*": ["src/internal/control/*"],
+      "@deepseek-ai/dsh-work-execution": ["src/internal/execution/index.ts"],
+      "@deepseek-ai/dsh-work-execution/*": ["src/internal/execution/*"],
+      "@deepseek-ai/dsh-work-node": ["src/internal/node/index.ts"],
+      "@deepseek-ai/dsh-work-node/*": ["src/internal/node/*"],
+      "@deepseek-ai/dsh-work-environment": ["src/internal/environment/index.ts"],
+      "@deepseek-ai/dsh-work-environment/*": ["src/internal/environment/*"],
+      "@deepseek-ai/dsh-work-orchestrator": ["src/internal/orchestrator/index.ts"],
+      "@deepseek-ai/dsh-work-orchestrator/*": ["src/internal/orchestrator/*"],
+      "@deepseek-ai/dsh-work-validation": ["src/internal/validation/index.ts"],
+      "@deepseek-ai/dsh-work-validation/*": ["src/internal/validation/*"],
+      "@deepseek-ai/dsh-work-execution-coordinator": ["src/internal/execution-coordinator/index.ts"],
+      "@deepseek-ai/dsh-work-execution-coordinator/*": ["src/internal/execution-coordinator/*"],
+      "@deepseek-ai/dsh-work-runner-subagent": ["src/internal/runner-subagent/index.ts"],
+      "@deepseek-ai/dsh-work-runner-subagent/*": ["src/internal/runner-subagent/*"],
+      "@deepseek-ai/dsh-work-node-gateway": ["src/faces/node-gateway/index.ts"],
+      "@deepseek-ai/dsh-work-node-gateway/*": ["src/faces/node-gateway/*"],
+      "@deepseek-ai/dsh-work-node-daemon": ["src/faces/node-daemon/index.ts"],
+      "@deepseek-ai/dsh-work-node-daemon/*": ["src/faces/node-daemon/*"],
+      "@deepseek-ai/dsh-work-node-runner-codex": ["src/faces/runner-codex/index.ts"],
+      "@deepseek-ai/dsh-work-node-runner-codex/*": ["src/faces/runner-codex/*"],
+      "@deepseek-ai/dsh-work-node-runner-claude-code": ["src/faces/runner-claude-code/index.ts"],
+      "@deepseek-ai/dsh-work-node-runner-claude-code/*": ["src/faces/runner-claude-code/*"]
+    }
   },
   "include": ["src"],
   "references": [
@@ -10,13 +37,6 @@
     { "path": "../../../vendor/cordis" },
     { "path": "../../identity/anonymous-user-id" },
     { "path": "../../typert/protocol" },
-    { "path": "../../runtime-diagnostics/invariants" },
-    { "path": "../work-control" },
-    { "path": "../work-execution" },
-    { "path": "../work-node" },
-    { "path": "../work-environment" },
-    { "path": "../work-orchestrator" },
-    { "path": "../work-validation" },
-    { "path": "../work-execution-coordinator" }
+    { "path": "../../runtime-diagnostics/invariants" }
   ]
 }

@@ -1,23 +1,26 @@
 {
   "name": "@deepseek-ai/dsh-work-console",
-  "description": "Global continuous-work dashboard projection and explicit Host-owned mutation commands",
+  "description": "Single DSH bundle for global continuous work: durable task control, execution, resources, orchestration, validation, coordination, remote runners, and Web console",
   "version": "0.1.0-rc.5",
   "private": true,
   "type": "module",
-  "main": "lib/index.js",
-  "types": "lib/types/index.d.ts",
+  "main": "lib/startup.js",
+  "types": "lib/types/startup.d.ts",
   "exports": {
-    ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" },
+    ".": { "types": "./lib/types/startup.d.ts", "default": "./lib/startup.js" },
+    "./console": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" },
     "./invariant": { "types": "./lib/types/invariant.d.ts", "default": "./lib/invariant.js" },
     "./types": { "types": "./lib/types/types.d.ts", "default": "./lib/types/types.js" },
     "./intake-types": { "types": "./lib/types/intake-types.d.ts", "default": "./lib/types/intake-types.js" },
     "./execution-types": { "types": "./lib/types/execution-types.d.ts", "default": "./lib/types/execution-types.js" },
     "./typert": { "types": "./lib/typert.host.d.ts", "default": "./lib/typert.host.js" },
     "./remote": { "types": "./lib/typert.remote-client.d.ts", "default": "./lib/typert.remote-client.js" },
+    "./cordis.patch.yml": "./cordis.patch.yml",
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "files": [
+    "lib/startup.js",
     "lib/index.js",
     "lib/invariant.js",
     "lib/types/**/*.js",
@@ -25,21 +28,36 @@
     "lib/typert.host.js",
     "lib/typert.host.d.ts",
     "lib/typert.remote-client.js",
-    "lib/typert.remote-client.d.ts"
+    "lib/typert.remote-client.d.ts",
+    "cordis.patch.yml"
   ],
   "license": "MIT",
-  "dependencies": { "zod": "^4.4.3" },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-client-ui-work-console": "workspace:^",
+    "@deepseek-ai/dsh-work-control": "workspace:^",
+    "@deepseek-ai/dsh-work-environment": "workspace:^",
+    "@deepseek-ai/dsh-work-execution": "workspace:^",
+    "@deepseek-ai/dsh-work-execution-coordinator": "workspace:^",
+    "@deepseek-ai/dsh-work-node": "workspace:^",
+    "@deepseek-ai/dsh-work-node-daemon": "workspace:^",
+    "@deepseek-ai/dsh-work-node-gateway": "workspace:^",
+    "@deepseek-ai/dsh-work-node-runner-claude-code": "workspace:^",
+    "@deepseek-ai/dsh-work-node-runner-codex": "workspace:^",
+    "@deepseek-ai/dsh-work-orchestrator": "workspace:^",
+    "@deepseek-ai/dsh-work-runner-subagent": "workspace:^",
+    "@deepseek-ai/dsh-work-validation": "workspace:^",
+    "zod": "^4.4.3"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/dsh-anonymous-user-id": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-typert-protocol": "workspace:^",
-    "@deepseek-ai/dsh-work-control": "workspace:^",
-    "@deepseek-ai/dsh-work-environment": "workspace:^",
-    "@deepseek-ai/dsh-work-execution": "workspace:^",
-    "@deepseek-ai/dsh-work-node": "workspace:^",
-    "@deepseek-ai/dsh-work-orchestrator": "workspace:^",
-    "@deepseek-ai/dsh-work-validation": "workspace:^"
+    "@deepseek-ai/dsh-typert-protocol": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
@@ -48,12 +66,6 @@
     "@deepseek-ai/dsh-session": "workspace:^",
     "@deepseek-ai/dsh-storage": "workspace:^",
     "@deepseek-ai/dsh-storage-domain": "workspace:^",
-    "@deepseek-ai/dsh-typert-protocol": "workspace:^",
-    "@deepseek-ai/dsh-work-control": "workspace:^",
-    "@deepseek-ai/dsh-work-environment": "workspace:^",
-    "@deepseek-ai/dsh-work-execution": "workspace:^",
-    "@deepseek-ai/dsh-work-node": "workspace:^",
-    "@deepseek-ai/dsh-work-orchestrator": "workspace:^",
-    "@deepseek-ai/dsh-work-validation": "workspace:^"
+    "@deepseek-ai/dsh-typert-protocol": "workspace:^"
   }
 }

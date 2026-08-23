@@ -5,4 +5,4 @@
 - Next experiment: keep the local web process available for manual browser inspection; stop it when the visual check is complete.
 - Prohibitions: do not delete the pre-existing untracked build outputs or commit them.
 - Risks: browser interaction, real runner/remote execution, API-backed e2e, and hardware acceptance remain unverified; constraints remain blocked outside this change scope.
-- Published: commit `2de12f3762f7684a0dd994b8cdfc99e78f8b6627` is on `origin/feat/session-list-and-settings-usage`.
+- Published: commit `e1595becc4eb53c191f7dd0a5285db74d0408d50` is on `origin/feat/session-list-and-settings-usage`.

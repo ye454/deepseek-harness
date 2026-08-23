@@ -63,20 +63,28 @@ export type * from './execution-types.ts'
 
 /** Stable external plugin name. */
 export const name = 'work-console'
+/** The durable Work Console services require the shared storage domain. */
+export const inject = ['storageDomain']
 
 /**
  * Mount the Work Console domain services below one owning plugin fiber.
  * @param ctx - Cordis context that owns the bundle.
  */
 export function apply(ctx: Context): void {
-  ctx.plugin(WorkControl)
-  ctx.plugin(WorkExecution)
-  ctx.plugin(WorkNode)
-  ctx.plugin(WorkEnvironmentService)
-  ctx.plugin(WorkOrchestratorService)
-  ctx.plugin(WorkValidation)
-  ctx.plugin(WorkExecutionCoordinator)
-  ctx.plugin(WorkConsoleGateway)
+  if (ctx.get('workControl') === undefined) {
+    mountIfMissing(ctx, 'workControl', WorkControl)
+    mountIfMissing(ctx, 'workExecution', WorkExecution)
+    mountIfMissing(ctx, 'workNodes', WorkNode)
+    mountIfMissing(ctx, 'workEnvironments', WorkEnvironmentService)
+    mountIfMissing(ctx, 'workOrchestrator', WorkOrchestratorService)
+    mountIfMissing(ctx, 'workValidation', WorkValidation)
+    mountIfMissing(ctx, 'workExecutionCoordinator', WorkExecutionCoordinator)
+  }
+  mountIfMissing(ctx, 'workConsole', WorkConsoleGateway)
+}
+
+function mountIfMissing(ctx: Context, service: string, plugin: Parameters<Context['plugin']>[0]): void {
+  if (ctx.get(service) === undefined) ctx.plugin(plugin)
 }
 
 /** Host Remote used by the browser work-console surface. */
@@ -474,4 +482,7 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-export default WorkConsoleGateway
+/** Default package entry: mount the complete Work Console bundle. */
+const workConsoleBundle = { name, inject, apply }
+
+export default workConsoleBundle

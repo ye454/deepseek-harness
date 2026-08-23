@@ -61,6 +61,11 @@
       config:
         backend: json
 
+    # Host Remote for the browser work-console surface. Its internal services
+    # are mounted below this one owning plugin after storage-domain is ready.
+    - id: work-console
+      name: '@deepseek-ai/dsh-work-console'
+
     - id: message-feedback
       name: '@deepseek-ai/dsh-message-feedback'
       config:
@@ -193,6 +198,9 @@
 
     - id: ui-sidebar
       name: '@deepseek-ai/dsh-client-ui-sidebar'
+
+    - id: ui-work-console
+      name: '@deepseek-ai/dsh-client-ui-work-console'
 
     - id: ui-settings
       name: '@deepseek-ai/dsh-client-ui-settings'

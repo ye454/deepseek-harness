@@ -17,6 +17,11 @@ Do not remove existing untracked build output, redesign the Work Console archite
 - Package typechecks report missing remote types/exports and strict TypeScript errors.
 - The official Host → Client → Web build passed and recorded 204 client artifacts.
 - `pnpm dsh web --no-open` served `http://127.0.0.1:3080` with HTTP 200 HTML containing `__DSH_BOOT__` and `__ModuleLoader__`.
+- Root cause of the missing panel: the Web bundle omitted the `ui-work-console` `dsh.client` row and package dependency.
+- After adding both composition entries and correcting static-input dependency placement, a real browser renders the `全局工作台` entry and the boot manifest contains `ui-work-console`.
+- The Host bundle initially selected the Gateway class as the package default and stayed pending on the consolidated internal services. The package default now points to a composite entry that mounts the internal services before the Gateway, while preserving pre-mounted test compositions.
+- `pnpm run test:web` was attempted in replay mode and failed broadly on existing Windows fixture/replay issues; no failure identified the Work Console roster change.
+- After the composite-entry fix, `pnpm exec vitest run packages/workflow/work-console/tests` passed 134/135 tests; the remaining node-gateway case timed out connecting to its local test port.
 
 ## Acceptance
 
@@ -24,6 +29,7 @@ Do not remove existing untracked build output, redesign the Work Console archite
 - [x] Focused Work Console tests pass without disabling cases.
 - [x] Relevant TypeScript, package invariant, and startup checks pass; remaining workspace constraint failures are explicitly documented.
 - [x] The assembled Web application starts locally and serves the injected boot page.
+- [x] The shipped Web bundle mounts the Work Console browser plugin and renders its sidebar entry.
 - [x] Only intentional files are committed and pushed to the current `origin` branch.
 
 ## Stop conditions

@@ -1,0 +1,9 @@
+# Single external bundle boundary for the continuous-work system.
+# Host domain services are mounted as child Cordis plugins by dsh-work-console.
+# The Web surface stays a client plugin until its source is folded into this package.
+- insert:
+    - id: work-console
+      name: '@deepseek-ai/dsh-work-console'
+
+    - id: ui-work-console
+      name: '@deepseek-ai/dsh-client-ui-work-console'

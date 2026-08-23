@@ -1,0 +1,24 @@
+- id: storage
+  name: '@deepseek-ai/dsh-storage'
+
+- id: storage-json
+  name: '@deepseek-ai/dsh-storage-json'
+  config:
+    root: .work-runner-store
+
+- id: storage-domain
+  name: '@deepseek-ai/dsh-storage-domain'
+  config:
+    backend: json
+
+- id: work-control
+  name: '@deepseek-ai/dsh-work-control'
+
+- id: work-execution
+  name: '@deepseek-ai/dsh-work-execution'
+
+- id: fixture-subagents
+  name: './fake-subagents.ts'
+
+- id: work-runner-subagent
+  name: '@deepseek-ai/dsh-work-runner-subagent'

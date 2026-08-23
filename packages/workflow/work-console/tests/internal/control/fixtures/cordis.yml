@@ -1,0 +1,21 @@
+- id: invariants
+  name: '@deepseek-ai/dsh-invariants'
+
+- id: storage
+  name: '@deepseek-ai/dsh-storage'
+
+- id: storage-json
+  name: '@deepseek-ai/dsh-storage-json'
+  config:
+    root: .work-control-store
+
+- id: storage-domain
+  name: '@deepseek-ai/dsh-storage-domain'
+  config:
+    backend: json
+
+- id: work-control
+  name: '@deepseek-ai/dsh-work-control'
+
+- id: work-control-invariant
+  name: '@deepseek-ai/dsh-work-control/invariant'

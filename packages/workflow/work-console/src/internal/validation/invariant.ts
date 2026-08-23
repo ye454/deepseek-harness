@@ -6,7 +6,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-work-validation'
+const PACKAGE_NAME = '@deepseek-ai/dsh-work-console/internal-validation'
 
 /** Cordis companion plugin name. */
 export const name = 'work-validation-invariant'
@@ -16,7 +16,7 @@ export const inject = ['invariants']
 /** Every emitted validation mutation must already match the durable detailed projection. */
 const install: InvariantInstaller = Object.assign(
   (ctx: Context, fail: (message: string) => never) => {
-    ctx.on('work-validation/session-changed', change => {
+    ctx.on('work-validation/session-changed', (change) => {
       const current = ctx.workValidation.getSession(change.session.taskId)
       if (
         current === undefined
@@ -27,7 +27,7 @@ const install: InvariantInstaller = Object.assign(
         fail(`task '${change.session.taskId}' validation session event does not match durable state`)
       }
     })
-    ctx.on('work-validation/result-changed', change => {
+    ctx.on('work-validation/result-changed', (change) => {
       const current = ctx.workValidation.listResults(change.result.taskId, change.result.generation)
         .find(result => result.validatorIndex === change.result.validatorIndex)
       if (

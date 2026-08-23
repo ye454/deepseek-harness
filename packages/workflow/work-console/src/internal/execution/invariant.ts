@@ -5,9 +5,9 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
-import { ExecutionThreadId } from '@deepseek-ai/dsh-work-execution'
+import { ExecutionThreadId } from './index.ts'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-work-execution'
+const PACKAGE_NAME = '@deepseek-ai/dsh-work-console/internal-execution'
 
 /** Cordis companion plugin name. */
 export const name = 'work-execution-invariant'
@@ -17,7 +17,7 @@ export const inject = ['invariants']
 /** Every package-owned event must describe the thread projection already visible through the service. */
 const install: InvariantInstaller = Object.assign(
   (ctx: Context, fail: (message: string) => never) => {
-    ctx.on('work-execution/changed', change => {
+    ctx.on('work-execution/changed', (change) => {
       const current = ctx.workExecution.get(ExecutionThreadId(change.ref.id))
       if (
         current === undefined

@@ -2,7 +2,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-work-orchestrator'
+const PACKAGE_NAME = '@deepseek-ai/dsh-work-console/internal-orchestrator'
 
 export const name = 'work-orchestrator-invariant'
 export const inject = ['invariants']

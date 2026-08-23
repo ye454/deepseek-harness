@@ -6,7 +6,7 @@
 import { z } from 'zod'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
-import type { RemoteNodeCommandId } from '@deepseek-ai/dsh-work-node-gateway'
+import type { RemoteNodeCommandId } from '../node-gateway/index.ts'
 
 const commandId = z.string().transform(value => value as RemoteNodeCommandId)
 const stopReason = z.enum(['completed', 'failed', 'cancelled', 'interrupted', 'refused', 'limit', 'unknown'])
@@ -29,7 +29,7 @@ export type WorkNodeDaemonJournalRecordValue = z.infer<typeof workNodeDaemonJour
 
 /** One local journal row per remote command id. */
 export const workNodeDaemonDomainSpec = defineDomain({
-  name: 'work-node-daemon',
+  name: 'work_node_daemon',
   version: 1,
   tables: {
     commands: domainTable<RemoteNodeCommandId, WorkNodeDaemonJournalRecordValue>(workNodeDaemonJournalRecord),

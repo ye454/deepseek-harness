@@ -11,8 +11,8 @@ import type {
   ExecutionThread,
   ExecutionThreadId,
   ExecutionThreadRef,
-} from '@deepseek-ai/dsh-work-execution'
-import type { WorkItemId } from '@deepseek-ai/dsh-work-control'
+} from '../execution/index.ts'
+import type { WorkItemId } from '../control/index.ts'
 
 /** Operational conclusions that can cross runner/session boundaries without replaying a transcript. */
 export interface WorkHandoff {

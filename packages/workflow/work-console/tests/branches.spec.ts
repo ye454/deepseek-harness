@@ -3,11 +3,11 @@ import { Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
-import WorkControlService, { type TaskPriority, type ValidatorSpec } from '@deepseek-ai/dsh-work-control'
-import WorkExecutionService from '@deepseek-ai/dsh-work-execution'
-import WorkEnvironmentRegistry, { type WorkEnvironmentSnapshot } from '@deepseek-ai/dsh-work-environment'
-import WorkNodeRegistry from '@deepseek-ai/dsh-work-node'
-import WorkValidationService from '@deepseek-ai/dsh-work-validation'
+import WorkControlService, { type TaskPriority, type ValidatorSpec } from '../src/internal/control/index.ts'
+import WorkExecutionService from '../src/internal/execution/index.ts'
+import WorkEnvironmentRegistry, { type WorkEnvironmentSnapshot } from '../src/internal/environment/index.ts'
+import WorkNodeRegistry from '../src/internal/node/index.ts'
+import WorkValidationService from '../src/internal/validation/index.ts'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 import WorkConsoleGateway from '../src/index.ts'
 
@@ -140,9 +140,9 @@ describe('WorkConsoleGateway host branch matrix', () => {
     })
     expect(settledDetail?.threads[0]?.lastAttempt?.finishedAt).toBeTypeOf('string')
     expect(settledDetail?.threads[0]?.blocker).toBeUndefined()
-    expect(ctx.workConsole.task('missing-work-item')).toBeUndefined()
+    expect(ctx.workConsole.task('missing-work-item')).toBeNull()
     const idea = await ctx.workControl.createIdea({ title: 'Idea only' })
-    expect(ctx.workConsole.task(String(idea.id))).toBeUndefined()
+    expect(ctx.workConsole.task(String(idea.id))).toBeNull()
     await ctx.fiber.dispose()
   })
 

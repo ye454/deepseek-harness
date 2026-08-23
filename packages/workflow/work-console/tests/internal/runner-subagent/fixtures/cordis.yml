@@ -12,13 +12,13 @@
     backend: json
 
 - id: work-control
-  name: '@deepseek-ai/dsh-work-control'
+  name: '../../../../src/internal/control/index.ts'
 
 - id: work-execution
-  name: '@deepseek-ai/dsh-work-execution'
+  name: '../../../../src/internal/execution/index.ts'
 
 - id: fixture-subagents
   name: './fake-subagents.ts'
 
 - id: work-runner-subagent
-  name: '@deepseek-ai/dsh-work-runner-subagent'
+  name: '../../../../src/internal/runner-subagent/index.ts'

@@ -12,7 +12,7 @@ export const name = 'work-console-invariant'
 /** Service required before the companion can reserve package ownership. */
 export const inject = ['invariants']
 
-/** Read-only derived projection: it owns no durable mutation or event stream to assert. */
+/** No runtime invariant: read-only derived projection owns no durable mutation or event stream to assert. */
 const install: InvariantInstaller = () => {}
 
 /** Register this package's invariant companion. */

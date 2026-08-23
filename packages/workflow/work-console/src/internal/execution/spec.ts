@@ -6,7 +6,7 @@
 import { z } from 'zod'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
-import { WorkItemId } from '@deepseek-ai/dsh-work-control'
+import { WorkItemId } from '../control/index.ts'
 import type { ExecutionThreadId } from './types.ts'
 
 const executionThreadId = z.string().transform(value => value as ExecutionThreadId)
@@ -50,7 +50,7 @@ export type ExecutionThreadRecord = z.infer<typeof executionThreadRecord>
 
 /** One table keyed by {@link ExecutionThreadId}; attempt history is intentionally external. */
 export const workExecutionDomainSpec = defineDomain({
-  name: 'work-execution',
+  name: 'work_execution',
   version: 1,
   tables: {
     threads: domainTable<ExecutionThreadId, ExecutionThreadRecord>(executionThreadRecord),

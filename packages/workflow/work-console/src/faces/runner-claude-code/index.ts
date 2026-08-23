@@ -7,12 +7,13 @@ import type { Context } from '@deepseek-ai/cordis'
 import s from '@deepseek-ai/schemastery'
 import {
   DEFAULT_DISPOSE_GRACE_MS,
+  DEFAULT_CLAUDE_CODE_PERMISSION_MODE,
   startClaudeCodeRun,
 } from '@deepseek-ai/dsh-subagent-claude-code'
 import type { SubagentStopReason } from '@deepseek-ai/dsh-subagent'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
-import type { ExecutionStopReason } from '@deepseek-ai/dsh-work-execution'
-import type { WorkNodeRunnerHandle, WorkNodeRunnerStartRequest } from '@deepseek-ai/dsh-work-node-daemon'
+import type { ExecutionStopReason } from '../../internal/execution/index.ts'
+import type { WorkNodeRunnerHandle, WorkNodeRunnerStartRequest } from '../node-daemon/index.ts'
 
 export const name = 'work-node-runner-claude-code'
 export const inject = ['workNodeDaemon', 'subprocess']
@@ -63,7 +64,6 @@ async function startClaudeDaemonRun(
 
   const localAbort = new AbortController()
   const signal = AbortSignal.any([request.signal, localAbort.signal])
-  const executable = await ctx.subprocess.resolveExecutable('claude', config.env, signal)
   const run = await startClaudeCodeRun(
     {
       prompt: [{ type: 'text', text: request.prompt }],
@@ -71,7 +71,7 @@ async function startClaudeDaemonRun(
     },
     {
       cwd: request.cwd,
-      executable,
+      permissionMode: DEFAULT_CLAUDE_CODE_PERMISSION_MODE,
       env: config.env,
       disposeGraceMs: config.disposeGraceMs,
       spawn: spec => ctx.subprocess.spawn(spec),
@@ -90,7 +90,7 @@ async function startClaudeDaemonRun(
 
   const result: Promise<ExecutionStopReason> = run.result.then(
     value => mapStopReason(value.stopReason),
-    error => {
+    (error) => {
       ctx.logger.warn(`work-node-runner-claude-code: infrastructure failure after publication: ${renderError(error)}`)
       return 'unknown'
     },

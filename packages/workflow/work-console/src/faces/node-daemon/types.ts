@@ -4,9 +4,9 @@
  */
 
 import type { SessionId } from '@deepseek-ai/dsh-session'
-import type { ExecutionStopReason, RunnerMode } from '@deepseek-ai/dsh-work-execution'
-import type { WorkEnvironmentSnapshot, WorkEnvironmentState } from '@deepseek-ai/dsh-work-environment'
-import type { RemoteNodeCommand, RemoteNodeCommandId } from '@deepseek-ai/dsh-work-node-gateway'
+import type { ExecutionStopReason, RunnerMode } from '../../internal/execution/index.ts'
+import type { WorkEnvironmentSnapshot, WorkEnvironmentState } from '../../internal/environment/index.ts'
+import type { RemoteNodeCommand, RemoteNodeCommandId } from '../node-gateway/index.ts'
 
 /** Start request passed to one daemon-local Runner provider. */
 export interface WorkNodeRunnerStartRequest {
@@ -47,9 +47,9 @@ export interface WorkNodeDaemonEnvironmentConfig {
   readonly key: string
   readonly name: string
   readonly workspacePath: string
-  readonly capabilities?: readonly string[]
-  readonly devices?: readonly string[]
-  readonly secretRefs?: readonly string[]
+  readonly capabilities?: string[]
+  readonly devices?: string[]
+  readonly secretRefs?: string[]
 }
 
 /** One environment report prepared for a gateway poll. */

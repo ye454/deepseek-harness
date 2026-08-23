@@ -12,4 +12,4 @@
     backend: json
 
 - id: work-node
-  name: '@deepseek-ai/dsh-work-node'
+  name: '../../../../src/internal/node/index.ts'

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import InvariantRegistry from '@deepseek-ai/dsh-invariants'
-import type WorkNodeGateway from '../src/index.ts'
-import { RemoteNodeCommandId } from '../src/index.ts'
-import type { RemoteNodeCommand, RemoteNodeCommandChanged } from '../src/index.ts'
-import * as WorkNodeGatewayInvariant from '../src/invariant.ts'
+import type WorkNodeGateway from '../../../src/faces/node-gateway/index.ts'
+import { RemoteNodeCommandId } from '../../../src/faces/node-gateway/index.ts'
+import type { RemoteNodeCommand, RemoteNodeCommandChanged } from '../../../src/faces/node-gateway/index.ts'
+import * as WorkNodeGatewayInvariant from '../../../src/faces/node-gateway/invariant.ts'
 
 const command = (state: RemoteNodeCommand['state'] = 'queued'): RemoteNodeCommand => ({
   id: RemoteNodeCommandId('command-1'),

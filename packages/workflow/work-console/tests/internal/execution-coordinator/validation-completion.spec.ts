@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { WorkItemId, type TaskWorkItem, type WorkControlService } from '@deepseek-ai/dsh-work-control'
-import type { WorkExecutionService } from '@deepseek-ai/dsh-work-execution'
-import type { WorkValidationService } from '@deepseek-ai/dsh-work-validation'
-import type { WorkOrchestrator } from '@deepseek-ai/dsh-work-orchestrator'
-import WorkExecutionCoordinator from '../src/index.ts'
+import { WorkItemId, type TaskWorkItem, type WorkControlService } from '../../../src/internal/control/index.ts'
+import type { WorkExecutionService } from '../../../src/internal/execution/index.ts'
+import type { WorkValidationService } from '../../../src/internal/validation/index.ts'
+import type { WorkOrchestrator } from '../../../src/internal/orchestrator/index.ts'
+import type { WorkEnvironmentRegistry } from '../../../src/internal/environment/index.ts'
+import WorkExecutionCoordinator from '../../../src/internal/execution-coordinator/index.ts'
 
 function validationTask(withHumanGate: boolean): TaskWorkItem {
   return {
@@ -23,9 +24,9 @@ function validationTask(withHumanGate: boolean): TaskWorkItem {
       version: 1,
       validators: withHumanGate
         ? [
-            { kind: 'automated-test', requirement: 'required', label: 'Tests' },
-            { kind: 'user-acceptance', requirement: 'required', label: 'Human acceptance' },
-          ]
+          { kind: 'automated-test', requirement: 'required', label: 'Tests' },
+          { kind: 'user-acceptance', requirement: 'required', label: 'Human acceptance' },
+        ]
         : [{ kind: 'automated-test', requirement: 'required', label: 'Tests' }],
     },
     validation: {
@@ -56,6 +57,7 @@ async function harness(task: TaskWorkItem) {
   ctx.provide('workExecution', {
     list: () => [],
   } as unknown as WorkExecutionService)
+  ctx.provide('workEnvironments', {} as WorkEnvironmentRegistry)
   ctx.provide('workOrchestrator', {} as WorkOrchestrator)
   ctx.provide('workValidation', {} as WorkValidationService)
   await ctx.plugin(WorkExecutionCoordinator)

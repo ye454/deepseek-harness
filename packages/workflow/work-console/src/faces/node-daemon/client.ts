@@ -15,7 +15,7 @@ import type {
   RemoteNodePollRequest,
   RemoteNodePollResponse,
   RemoteNodeResultRequest,
-} from '@deepseek-ai/dsh-work-node-gateway'
+} from '../node-gateway/index.ts'
 
 const HELLO_PATH = '/work-node/v1/hello'
 const POLL_PATH = '/work-node/v1/poll'
@@ -144,7 +144,7 @@ export class WorkNodeGatewayClient {
    * @returns validated node revision and commands.
    */
   async poll(request: RemoteNodePollRequest, signal?: AbortSignal): Promise<RemoteNodePollResponse> {
-    return pollResponse.parse(await this.post(POLL_PATH, request, signal)) as RemoteNodePollResponse
+    return pollResponse.parse(await this.post(POLL_PATH, request, signal)) as unknown as RemoteNodePollResponse
   }
 
   /**

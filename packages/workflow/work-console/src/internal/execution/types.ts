@@ -5,7 +5,7 @@
 
 import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { SessionId } from '@deepseek-ai/dsh-session'
-import type { WorkItemId } from '@deepseek-ai/dsh-work-control'
+import type { WorkItemId } from '../control/index.ts'
 
 /** Stable identity of one execution effort attached to a task. */
 export type ExecutionThreadId = Branded<'ExecutionThreadId'>

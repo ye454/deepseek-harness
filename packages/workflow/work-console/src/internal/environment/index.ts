@@ -6,8 +6,8 @@
 import { randomUUID } from 'node:crypto'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type { KvTable } from '@deepseek-ai/dsh-storage-domain'
-import type { ExecutionThread, ExecutionThreadId, ExecutionThreadRef } from '@deepseek-ai/dsh-work-execution'
-import type { WorkNode, WorkNodeId } from '@deepseek-ai/dsh-work-node'
+import type { ExecutionThread, ExecutionThreadId, ExecutionThreadRef } from '../execution/index.ts'
+import type { WorkNode, WorkNodeId } from '../node/index.ts'
 import { workEnvironmentDomainSpec } from './spec.ts'
 import type { ThreadEnvironmentBindingRecord, WorkEnvironmentRecord } from './spec.ts'
 import type {
@@ -145,7 +145,7 @@ export class WorkEnvironmentRegistry extends Service {
     this.requireReportingNode(current.nodeId)
     const state = request.state ?? 'ready'
     const degradedReason = resolveStateReason(state, request.degradedReason)
-    const next = await this.requireEnvironmentTable().update(expected.id, record => {
+    const next = await this.requireEnvironmentTable().update(expected.id, (record) => {
       const environment = asEnvironment(record)
       assertEnvironmentRef(environment, expected)
       const now = new Date().toISOString()
@@ -328,11 +328,9 @@ function normalizeSnapshot(snapshot: WorkEnvironmentSnapshot): WorkEnvironmentSn
   const workspacePath = requireText(snapshot.workspace.path, 'workspace path')
   const os = requireText(snapshot.runtime.os, 'runtime os')
   const arch = requireText(snapshot.runtime.arch, 'runtime arch')
-  const versions = Object.fromEntries(
-    Object.entries(snapshot.runtime.versions)
-      .map(([name, version]) => [requireText(name, 'runtime version name'), requireText(version, 'runtime version')])
-      .sort(([left], [right]) => left.localeCompare(right)),
-  )
+  const versionEntries: Array<[string, string]> = Object.entries(snapshot.runtime.versions)
+    .map(([name, version]) => [requireText(name, 'runtime version name'), requireText(version, 'runtime version')])
+  const versions = Object.fromEntries(versionEntries.sort(([left], [right]) => left.localeCompare(right)))
   const services = [...snapshot.services]
     .map(service => ({ ...service, name: requireText(service.name, 'service name') }))
     .sort((left, right) => left.name.localeCompare(right.name))

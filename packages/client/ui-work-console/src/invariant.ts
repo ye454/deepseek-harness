@@ -12,7 +12,7 @@ export const name = 'client-ui-work-console-invariant'
 /** Service required before the companion can reserve package ownership. */
 export const inject = ['invariants']
 
-/** No Host runtime invariant: browser state is covered by slot/store/Remote tests. */
+/** No runtime invariant: browser state is covered by slot/store/Remote tests. */
 const install: InvariantInstaller = () => {}
 
 /** Register this package's invariant companion. */

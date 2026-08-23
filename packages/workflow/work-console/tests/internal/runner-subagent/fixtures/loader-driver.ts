@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type {} from '@deepseek-ai/dsh-work-control'
-import type {} from '@deepseek-ai/dsh-work-execution'
-import type {} from '../../src/index.ts'
+import type {} from '../../../../src/internal/control/index.ts'
+import type {} from '../../../../src/internal/execution/index.ts'
+import type {} from '../../../../src/index.ts'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { Context } from '@deepseek-ai/cordis'
 import { boot, installFailLoud, loadEnv, resolveConfigPath } from '@deepseek-ai/dsh-app-boot'

@@ -15,13 +15,13 @@
     backend: json
 
 - id: work-control
-  name: '@deepseek-ai/dsh-work-control'
+  name: '../../../../src/internal/control/index.ts'
 
 - id: work-control-invariant
-  name: '@deepseek-ai/dsh-work-control/invariant'
+  name: '../../../../src/internal/control/invariant.ts'
 
 - id: work-execution
-  name: '@deepseek-ai/dsh-work-execution'
+  name: '../../../../src/internal/execution/index.ts'
 
 - id: work-execution-invariant
-  name: '@deepseek-ai/dsh-work-execution/invariant'
+  name: '../../../../src/internal/execution/invariant.ts'

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import InvariantRegistry from '@deepseek-ai/dsh-invariants'
-import { WorkItemId } from '@deepseek-ai/dsh-work-control'
-import type WorkValidationService from '../src/index.ts'
-import type { WorkValidationSession, WorkValidatorResult } from '../src/index.ts'
-import * as WorkValidationInvariant from '../src/invariant.ts'
+import { WorkItemId } from '../../../src/internal/control/index.ts'
+import type WorkValidationService from '../../../src/internal/validation/index.ts'
+import type { WorkValidationSession, WorkValidatorResult } from '../../../src/internal/validation/index.ts'
+import * as WorkValidationInvariant from '../../../src/internal/validation/invariant.ts'
 
 const taskId = WorkItemId('task-1')
 
@@ -38,7 +38,7 @@ async function setup(currentSession?: WorkValidationSession, currentResult?: Wor
   ctx.provide('workValidation', {
     getSession: () => currentSession,
     listResults: () => currentResult === undefined ? [] : [currentResult],
-  } as WorkValidationService)
+  } as unknown as WorkValidationService)
   await ctx.plugin(WorkValidationInvariant)
   return ctx
 }

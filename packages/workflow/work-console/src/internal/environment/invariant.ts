@@ -5,9 +5,9 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
-import { WorkEnvironmentId } from '@deepseek-ai/dsh-work-environment'
+import { WorkEnvironmentId } from './index.ts'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-work-environment'
+const PACKAGE_NAME = '@deepseek-ai/dsh-work-console/internal-environment'
 
 /** Cordis companion plugin name. */
 export const name = 'work-environment-invariant'
@@ -17,7 +17,7 @@ export const inject = ['invariants']
 /** Every emitted mutation must already match the durable environment/binding projection. */
 const install: InvariantInstaller = Object.assign(
   (ctx: Context, fail: (message: string) => never) => {
-    ctx.on('work-environment/changed', change => {
+    ctx.on('work-environment/changed', (change) => {
       const current = ctx.workEnvironments.get(WorkEnvironmentId(change.ref.id))
       if (
         current === undefined
@@ -28,7 +28,7 @@ const install: InvariantInstaller = Object.assign(
         fail(`work environment '${change.ref.id}' change event does not match durable state`)
       }
     })
-    ctx.on('work-environment/binding-changed', change => {
+    ctx.on('work-environment/binding-changed', (change) => {
       const current = ctx.workEnvironments.getBinding(change.ref.threadId)
       if (
         current === undefined

@@ -5,9 +5,9 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
-import { WorkItemId } from '@deepseek-ai/dsh-work-control'
+import { WorkItemId } from './index.ts'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-work-control'
+const PACKAGE_NAME = '@deepseek-ai/dsh-work-console/internal-control'
 
 /** Cordis companion plugin name. */
 export const name = 'work-control-invariant'
@@ -17,7 +17,7 @@ export const inject = ['invariants']
 /** Every package-owned change event must equal the service's authoritative durable projection at emission. */
 const install: InvariantInstaller = Object.assign(
   (ctx: Context, fail: (message: string) => never) => {
-    ctx.on('work-control/changed', change => {
+    ctx.on('work-control/changed', (change) => {
       if (change.operation === 'delete') {
         if (ctx.workControl.get(change.ref.id) !== undefined) {
           fail(`deleted work item '${change.ref.id}' is still published by ctx.workControl`)

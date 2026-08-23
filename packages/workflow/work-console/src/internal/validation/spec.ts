@@ -5,7 +5,7 @@
 
 import { z } from 'zod'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
-import type { WorkItemId } from '@deepseek-ai/dsh-work-control'
+import type { WorkItemId } from '../control/index.ts'
 
 const workItemId = z.string().transform(value => value as WorkItemId)
 const validatorKind = z.enum([
@@ -43,7 +43,7 @@ export const workValidatorResultRecord = z.object({
   outcome: z.enum(['passed', 'failed']),
   source: z.enum(['automation', 'user']),
   actor: z.string().optional(),
-  evidence: z.array(evidenceRefRecord),
+  evidence: z.array(evidenceRefRecord).readonly(),
   note: z.string().optional(),
   revision: z.number().int().positive(),
   checkedAt: z.string(),
@@ -55,7 +55,7 @@ export type WorkValidatorResultRecord = z.infer<typeof workValidatorResultRecord
 
 /** One active generation per Task; result rows retain older generations for audit history. */
 export const workValidationDomainSpec = defineDomain({
-  name: 'work-validation',
+  name: 'work_validation',
   version: 1,
   tables: {
     sessions: domainTable<WorkItemId, WorkValidationSessionRecord>(workValidationSessionRecord),

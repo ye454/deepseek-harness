@@ -27,6 +27,13 @@ import {
   type ClaudeCodeRunSpec,
 } from './run.ts'
 
+export {
+  DEFAULT_CLAUDE_CODE_PERMISSION_MODE,
+  DEFAULT_DISPOSE_GRACE_MS,
+  startClaudeCodeRun,
+} from './run.ts'
+export type { ClaudeCodeRunSpec, ClaudeCodePermissionMode } from './run.ts'
+
 export const name = 'subagent-claude-code'
 export const inject = ['subagents', 'subprocess']
 

@@ -5,8 +5,8 @@
 
 import { z } from 'zod'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
-import type { ExecutionThreadId } from '@deepseek-ai/dsh-work-execution'
-import type { WorkNodeId } from '@deepseek-ai/dsh-work-node'
+import type { ExecutionThreadId } from '../execution/index.ts'
+import type { WorkNodeId } from '../node/index.ts'
 import type { WorkEnvironmentId } from './types.ts'
 
 const workEnvironmentId = z.string().transform(value => value as WorkEnvironmentId)
@@ -39,10 +39,10 @@ const serviceSnapshot = z.object({
 export const workEnvironmentSnapshot = z.object({
   workspace: workspaceSnapshot,
   runtime: runtimeSnapshot,
-  services: z.array(serviceSnapshot),
-  devices: z.array(z.string()),
-  capabilities: z.array(z.string()),
-  secretRefs: z.array(z.string()),
+  services: z.array(serviceSnapshot).readonly(),
+  devices: z.array(z.string()).readonly(),
+  capabilities: z.array(z.string()).readonly(),
+  secretRefs: z.array(z.string()).readonly(),
 })
 
 /** Durable environment record schema. */
@@ -75,7 +75,7 @@ export type ThreadEnvironmentBindingRecord = z.infer<typeof threadEnvironmentBin
 
 /** Environment records plus one current binding per execution thread. */
 export const workEnvironmentDomainSpec = defineDomain({
-  name: 'work-environment',
+  name: 'work_environment',
   version: 1,
   tables: {
     environments: domainTable<WorkEnvironmentId, WorkEnvironmentRecord>(workEnvironmentRecord),

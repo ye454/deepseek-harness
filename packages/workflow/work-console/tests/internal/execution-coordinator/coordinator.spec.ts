@@ -2,14 +2,14 @@ import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
-import WorkControlService from '@deepseek-ai/dsh-work-control'
-import WorkExecutionService, { type ExecutionThread } from '@deepseek-ai/dsh-work-execution'
-import WorkEnvironmentRegistry from '@deepseek-ai/dsh-work-environment'
-import WorkNodeRegistry from '@deepseek-ai/dsh-work-node'
-import WorkOrchestrator from '@deepseek-ai/dsh-work-orchestrator'
-import WorkValidationService from '@deepseek-ai/dsh-work-validation'
-import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
-import WorkExecutionCoordinator from '../src/index.ts'
+import WorkControlService from '../../../src/internal/control/index.ts'
+import WorkExecutionService, { type ExecutionThread } from '../../../src/internal/execution/index.ts'
+import WorkEnvironmentRegistry from '../../../src/internal/environment/index.ts'
+import WorkNodeRegistry from '../../../src/internal/node/index.ts'
+import WorkOrchestrator from '../../../src/internal/orchestrator/index.ts'
+import WorkValidationService from '../../../src/internal/validation/index.ts'
+import { MemoryMediaPool, MemoryStorageBackend } from '../../../../../storage/storage-domain/tests/helpers/memory-backend.ts'
+import WorkExecutionCoordinator from '../../../src/internal/execution-coordinator/index.ts'
 
 function environmentSnapshot(path: string, commit = 'a1') {
   return {
@@ -37,7 +37,12 @@ async function harness() {
   await ctx.plugin(WorkOrchestrator)
 
   const commands: Array<Record<string, unknown>> = []
-  const enqueueExecute = vi.fn(async (threadRef: { id: string; revision: number }, runnerProvider: string, mode: string, handoff: unknown) => {
+  const enqueueExecute = vi.fn(async (
+    threadRef: { id: string; revision: number },
+    runnerProvider: string,
+    mode: string,
+    handoff: unknown,
+  ) => {
     const binding = ctx.workEnvironments.getBinding(threadRef.id as never)!
     const command = {
       id: `cmd-${commands.length + 1}`,

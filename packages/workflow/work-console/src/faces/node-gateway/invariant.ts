@@ -6,7 +6,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-work-node-gateway'
+const PACKAGE_NAME = '@deepseek-ai/dsh-work-console/node-gateway'
 
 /** Cordis companion plugin name. */
 export const name = 'work-node-gateway-invariant'
@@ -16,7 +16,7 @@ export const inject = ['invariants']
 /** Every package-owned command event must match the already-published durable command projection. */
 const install: InvariantInstaller = Object.assign(
   (ctx: Context, fail: (message: string) => never) => {
-    ctx.on('work-node-gateway/command-changed', change => {
+    ctx.on('work-node-gateway/command-changed', (change) => {
       const current = ctx.workNodeGateway.getCommand(change.command.id)
       if (
         current === undefined

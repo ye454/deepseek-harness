@@ -2,7 +2,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-work-execution-coordinator'
+const PACKAGE_NAME = '@deepseek-ai/dsh-work-console/internal-execution-coordinator'
 
 export const name = 'work-execution-coordinator-invariant'
 export const inject = ['invariants']

@@ -1,8 +1,8 @@
 import { Buffer } from 'node:buffer'
 import { describe, expect, it } from 'vitest'
-import { WorkItemId } from '@deepseek-ai/dsh-work-control'
-import type { TaskWorkItem } from '@deepseek-ai/dsh-work-control'
-import { buildBoundedWorkPrompt, WORK_RUNNER_PROMPT_PREFIX, WorkPromptBudgetError } from '../src/index.ts'
+import { WorkItemId } from '../../../src/internal/control/index.ts'
+import type { TaskWorkItem } from '../../../src/internal/control/index.ts'
+import { buildBoundedWorkPrompt, WORK_RUNNER_PROMPT_PREFIX, WorkPromptBudgetError } from '../../../src/internal/runner-subagent/index.ts'
 
 function task(): TaskWorkItem {
   return {

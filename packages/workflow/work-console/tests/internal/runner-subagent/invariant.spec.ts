@@ -4,11 +4,11 @@ import { Context } from '@deepseek-ai/cordis'
 import InvariantRegistry from '@deepseek-ai/dsh-invariants'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import { WorkItemId } from '@deepseek-ai/dsh-work-control'
-import { ExecutionThreadId } from '@deepseek-ai/dsh-work-execution'
-import { WORK_RUNNER_PROMPT_PREFIX } from '../src/index.ts'
-import type { WorkRunnerSubagentRequestEvent } from '../src/index.ts'
-import * as WorkRunnerInvariant from '../src/invariant.ts'
+import { WorkItemId } from '../../../src/internal/control/index.ts'
+import { ExecutionThreadId } from '../../../src/internal/execution/index.ts'
+import { WORK_RUNNER_PROMPT_PREFIX } from '../../../src/internal/runner-subagent/index.ts'
+import type { WorkRunnerSubagentRequestEvent } from '../../../src/internal/runner-subagent/index.ts'
+import * as WorkRunnerInvariant from '../../../src/internal/runner-subagent/invariant.ts'
 
 async function setup(): Promise<Context> {
   const ctx = new Context()

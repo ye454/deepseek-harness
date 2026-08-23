@@ -3,15 +3,15 @@ import { Context } from '@deepseek-ai/cordis'
 import Storage from '@deepseek-ai/dsh-storage'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
-import type { TaskStatus, TaskWorkItem, WorkControlService } from '@deepseek-ai/dsh-work-control'
-import { WorkItemId } from '@deepseek-ai/dsh-work-control'
-import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
+import type { TaskStatus, TaskWorkItem, WorkControlService } from '../../../src/internal/control/index.ts'
+import { WorkItemId } from '../../../src/internal/control/index.ts'
+import { MemoryMediaPool, MemoryStorageBackend } from '../../../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 import WorkExecutionService, {
   ExecutionTaskUnavailableError,
   ExecutionThreadConflictError,
   ExecutionThreadTransitionError,
-} from '../src/index.ts'
-import type { ExecutionThreadRef } from '../src/index.ts'
+} from '../../../src/internal/execution/index.ts'
+import type { ExecutionThreadRef } from '../../../src/internal/execution/index.ts'
 
 function ref(thread: { id: ExecutionThreadRef['id']; revision: number }): ExecutionThreadRef {
   return { id: thread.id, revision: thread.revision }

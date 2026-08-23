@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import type {} from '@deepseek-ai/dsh-work-control'
-import type {} from '../../src/index.ts'
+import type {} from '../../../../src/internal/control/index.ts'
+import type {} from '../../../../src/index.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { boot, installFailLoud, loadEnv, resolveConfigPath } from '@deepseek-ai/dsh-app-boot'
 

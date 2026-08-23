@@ -4,7 +4,7 @@
  */
 
 import { Buffer } from 'node:buffer'
-import type { TaskWorkItem, ValidatorSpec } from '@deepseek-ai/dsh-work-control'
+import type { TaskWorkItem, ValidatorSpec } from '../control/index.ts'
 import type { WorkHandoff } from './types.ts'
 
 /** Stable instruction prefix owned by this package and logged with every generated child prompt. */

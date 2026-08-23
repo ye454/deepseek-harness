@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import InvariantRegistry from '@deepseek-ai/dsh-invariants'
-import { WorkItemId } from '@deepseek-ai/dsh-work-control'
-import type { ExecutionThread, ExecutionThreadChanged, WorkExecutionService } from '../src/index.ts'
-import { ExecutionThreadId } from '../src/index.ts'
-import * as WorkExecutionInvariant from '../src/invariant.ts'
+import { WorkItemId } from '../../../src/internal/control/index.ts'
+import type { ExecutionThread, ExecutionThreadChanged, WorkExecutionService } from '../../../src/internal/execution/index.ts'
+import { ExecutionThreadId } from '../../../src/internal/execution/index.ts'
+import * as WorkExecutionInvariant from '../../../src/internal/execution/invariant.ts'
 
 const thread = (revision = 1, state: ExecutionThread['state'] = 'idle'): ExecutionThread => ({
   id: ExecutionThreadId('thread-1'),

@@ -5,9 +5,9 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
-import { WorkNodeId } from '@deepseek-ai/dsh-work-node'
+import { WorkNodeId } from './index.ts'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-work-node'
+const PACKAGE_NAME = '@deepseek-ai/dsh-work-console/internal-node'
 
 /** Cordis companion plugin name. */
 export const name = 'work-node-invariant'
@@ -17,7 +17,7 @@ export const inject = ['invariants']
 /** Every package-owned change event must match the already-published durable node projection. */
 const install: InvariantInstaller = Object.assign(
   (ctx: Context, fail: (message: string) => never) => {
-    ctx.on('work-node/changed', change => {
+    ctx.on('work-node/changed', (change) => {
       const current = ctx.workNodes.get(WorkNodeId(change.ref.id))
       if (
         current === undefined

@@ -8,9 +8,9 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import s from '@deepseek-ai/schemastery'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { KvTable } from '@deepseek-ai/dsh-storage-domain'
-import type { ExecutionStopReason, RunnerMode } from '@deepseek-ai/dsh-work-execution'
-import type { WorkNodeFeature } from '@deepseek-ai/dsh-work-node'
-import type { RemoteNodeCommand, RemoteNodeCommandId } from '@deepseek-ai/dsh-work-node-gateway'
+import type { ExecutionStopReason, RunnerMode } from '../../internal/execution/index.ts'
+import type { WorkNodeFeature } from '../../internal/node/index.ts'
+import type { RemoteNodeCommand, RemoteNodeCommandId } from '../node-gateway/index.ts'
 import { WorkNodeGatewayClient, WorkNodeDaemonGatewayError } from './client.ts'
 import { WorkNodeEnvironmentCollector } from './environment.ts'
 import { workNodeDaemonDomainSpec } from './spec.ts'
@@ -42,7 +42,7 @@ export interface Config {
   readonly gitCommand: string
   readonly environmentCommandOutputBytes: number
   readonly processGraceMs: number
-  readonly environments: readonly WorkNodeDaemonEnvironmentConfig[]
+  readonly environments: WorkNodeDaemonEnvironmentConfig[]
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -104,9 +104,8 @@ export class WorkNodeDaemon extends Service {
   private readonly activeByCommand = new Map<RemoteNodeCommandId, ActiveRun>()
   private readonly activeByThread = new Map<string, ActiveRun>()
   private readonly processing = new Map<RemoteNodeCommandId, Promise<void>>()
-  private loopAbort?: AbortController
   private loopPromise?: Promise<void>
-  private nodeRevision?: number
+  private nodeRevision: number | undefined
   private recoveryPending = true
 
   constructor(ctx: Context, private readonly config: Config) {
@@ -139,7 +138,6 @@ export class WorkNodeDaemon extends Service {
     })
 
     const controller = new AbortController()
-    this.loopAbort = controller
     this.loopPromise = this.runLoop(controller.signal)
     this.ctx.effect(() => async () => {
       controller.abort()
@@ -207,9 +205,11 @@ export class WorkNodeDaemon extends Service {
         }
         await this.flushTerminalResults(signal)
         const environments = await this.collectEnvironments(signal)
+        const nodeRevision = this.nodeRevision
+        if (nodeRevision === undefined) throw new Error('work-node-daemon failed to establish a node revision')
         const poll = await this.requireClient().poll({
           nodeKey: this.config.nodeKey,
-          nodeRevision: this.nodeRevision!,
+          nodeRevision,
           protocolVersion: this.config.protocolVersion,
           runnerProviders: this.runnerNames(),
           features: this.features(),
@@ -249,7 +249,7 @@ export class WorkNodeDaemon extends Service {
   private schedule(command: RemoteNodeCommand, daemonSignal: AbortSignal): void {
     if (this.processing.has(command.id)) return
     const operation = this.processCommand(command, daemonSignal)
-      .catch(error => {
+      .catch((error) => {
         if (!daemonSignal.aborted) this.ctx.logger.warn(`work-node-daemon command '${command.id}': ${renderError(error)}`)
       })
       .finally(() => {
@@ -304,7 +304,9 @@ export class WorkNodeDaemon extends Service {
         cwd: environment.workspacePath,
         signal,
         mode: command.payload.mode,
-        resumeSessionId: command.payload.resumeSessionId,
+        ...(command.payload.resumeSessionId === undefined
+          ? {}
+          : { resumeSessionId: command.payload.resumeSessionId }),
       })
       assertPublishedHandle(command, handle)
     } catch (error) {
@@ -454,10 +456,10 @@ export class WorkNodeDaemon extends Service {
     const interrupted = record.state === 'interrupted'
       ? record
       : await this.updateJournal(record.commandId, current => ({
-          ...current,
-          state: 'interrupted',
-          updatedAt: new Date().toISOString(),
-        }))
+        ...current,
+        state: 'interrupted',
+        updatedAt: new Date().toISOString(),
+      }))
     const response = await this.requireClient().ack({
       nodeKey: this.config.nodeKey,
       commandId: interrupted.commandId,
@@ -629,7 +631,7 @@ function requireText(value: string, field: string): string {
 
 async function delay(ms: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) return
-  await new Promise<void>(resolve => {
+  await new Promise<void>((resolve) => {
     let settled = false
     const finish = (): void => {
       if (settled) return

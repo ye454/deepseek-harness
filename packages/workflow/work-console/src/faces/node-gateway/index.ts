@@ -11,10 +11,10 @@ import s from '@deepseek-ai/schemastery'
 import { credentialRef, type CredentialRef } from '@deepseek-ai/dsh-credentials'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { KvTable } from '@deepseek-ai/dsh-storage-domain'
-import type { ExecutionThread, ExecutionThreadId, ExecutionThreadRef, RunnerMode } from '@deepseek-ai/dsh-work-execution'
-import type { WorkEnvironmentRef, WorkEnvironmentSnapshot } from '@deepseek-ai/dsh-work-environment'
-import { WorkNodeConflictError, type WorkNode, type WorkNodeId } from '@deepseek-ai/dsh-work-node'
-import { buildBoundedWorkPrompt, type WorkHandoff } from '@deepseek-ai/dsh-work-runner-subagent'
+import type { ExecutionThread, ExecutionThreadId, ExecutionThreadRef, RunnerMode } from '../../internal/execution/index.ts'
+import type { WorkEnvironmentRef, WorkEnvironmentSnapshot } from '../../internal/environment/index.ts'
+import { WorkNodeConflictError, type WorkNode, type WorkNodeId } from '../../internal/node/index.ts'
+import { buildBoundedWorkPrompt, type WorkHandoff } from '../../internal/runner-subagent/index.ts'
 import { workNodeGatewayDomainSpec } from './spec.ts'
 import type {
   RemoteEnvironmentIdentityRecord,
@@ -168,12 +168,44 @@ export class WorkNodeGateway extends Service {
     this.ctx.effect(() => this.ctx.webServer.register({
       kind: 'exact',
       path: POLL_PATH,
-      handler: (req, res) => this.handle(req, res, POLL_PATH, pollRequest, body => this.poll(body)),
+      handler: (req, res) => this.handle(
+        req,
+        res,
+        POLL_PATH,
+        pollRequest,
+        body => this.poll({
+          nodeKey: body.nodeKey,
+          nodeRevision: body.nodeRevision,
+          protocolVersion: body.protocolVersion,
+          runnerProviders: body.runnerProviders,
+          features: body.features,
+          environments: body.environments.map(report => ({
+            key: report.key,
+            name: report.name,
+            snapshot: canonicalizeSnapshot(report.snapshot as unknown as WorkEnvironmentSnapshot),
+            ...(report.state === undefined ? {} : { state: report.state }),
+            ...(report.degradedReason === undefined ? {} : { degradedReason: report.degradedReason }),
+          })),
+          ...(body.state === undefined ? {} : { state: body.state }),
+          ...(body.degradedReason === undefined ? {} : { degradedReason: body.degradedReason }),
+        }),
+      ),
     }), 'workNodeGateway.pollRoute')
     this.ctx.effect(() => this.ctx.webServer.register({
       kind: 'exact',
       path: ACK_PATH,
-      handler: (req, res) => this.handle(req, res, ACK_PATH, ackRequest, body => this.ack(body)),
+      handler: (req, res) => this.handle(
+        req,
+        res,
+        ACK_PATH,
+        ackRequest,
+        body => this.ack({
+          nodeKey: body.nodeKey,
+          commandId: body.commandId,
+          accepted: body.accepted,
+          ...(body.subagentSessionId === undefined ? {} : { subagentSessionId: body.subagentSessionId }),
+        }),
+      ),
     }), 'workNodeGateway.ackRoute')
     this.ctx.effect(() => this.ctx.webServer.register({
       kind: 'exact',
@@ -397,8 +429,8 @@ export class WorkNodeGateway extends Service {
         protocolVersion: request.protocolVersion,
         runnerProviders: request.runnerProviders,
         features: request.features,
-        state: request.state,
-        degradedReason: request.degradedReason,
+        ...(request.state === undefined ? {} : { state: request.state }),
+        ...(request.degradedReason === undefined ? {} : { degradedReason: request.degradedReason }),
       })
       for (const report of request.environments) {
         await this.applyEnvironmentReport(request.nodeKey, node.id, report)
@@ -469,7 +501,7 @@ export class WorkNodeGateway extends Service {
             {
               provider: current.payload.runnerProvider,
               mode: current.payload.mode,
-              subagentSessionId: request.subagentSessionId,
+              ...(request.subagentSessionId === undefined ? {} : { subagentSessionId: request.subagentSessionId }),
             },
           )
         } catch {
@@ -530,9 +562,9 @@ export class WorkNodeGateway extends Service {
       const environment = await this.ctx.workEnvironments.registerEnvironment({
         nodeId,
         name: report.name,
-        state: report.state,
-        degradedReason: report.degradedReason,
         snapshot: canonicalSnapshot,
+        ...(report.state === undefined ? {} : { state: report.state }),
+        ...(report.degradedReason === undefined ? {} : { degradedReason: report.degradedReason }),
       })
       const now = new Date().toISOString()
       const identity: RemoteEnvironmentIdentity = {
@@ -565,9 +597,9 @@ export class WorkNodeGateway extends Service {
     await this.ctx.workEnvironments.refreshEnvironment(
       { id: environment.id, revision: environment.revision } satisfies WorkEnvironmentRef,
       {
-        state: report.state,
-        degradedReason: report.degradedReason,
         snapshot: canonicalSnapshot,
+        ...(report.state === undefined ? {} : { state: report.state }),
+        ...(report.degradedReason === undefined ? {} : { degradedReason: report.degradedReason }),
       },
     )
   }
@@ -636,7 +668,7 @@ export class WorkNodeGateway extends Service {
       .at(-1)
   }
 
-  private findEnvironmentIdentity(environmentId: import('@deepseek-ai/dsh-work-environment').WorkEnvironmentId): RemoteEnvironmentIdentity | undefined {
+  private findEnvironmentIdentity(environmentId: import('../../internal/environment/index.ts').WorkEnvironmentId): RemoteEnvironmentIdentity | undefined {
     for (const [, record] of this.requireEnvironmentIdentityTable().entries()) {
       const identity = asEnvironmentIdentity(record)
       if (identity.environmentId === environmentId) return identity
@@ -752,7 +784,7 @@ export class WorkNodeGateway extends Service {
   private async withNodeLock<T>(nodeKey: string, operation: () => Promise<T>): Promise<T> {
     const previous = this.nodeTails.get(nodeKey) ?? Promise.resolve()
     let release!: () => void
-    const next = new Promise<void>(resolve => { release = resolve })
+    const next = new Promise<void>((resolve) => { release = resolve })
     const tail = previous.then(() => next, () => next)
     this.nodeTails.set(nodeKey, tail)
     await previous.catch(() => {})

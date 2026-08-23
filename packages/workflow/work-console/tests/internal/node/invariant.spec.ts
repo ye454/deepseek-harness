@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import InvariantRegistry from '@deepseek-ai/dsh-invariants'
-import type WorkNodeRegistry from '../src/index.ts'
-import { WorkNodeId } from '../src/index.ts'
-import type { WorkNode, WorkNodeChanged } from '../src/index.ts'
-import * as WorkNodeInvariant from '../src/invariant.ts'
+import type WorkNodeRegistry from '../../../src/internal/node/index.ts'
+import { WorkNodeId } from '../../../src/internal/node/index.ts'
+import type { WorkNode, WorkNodeChanged } from '../../../src/internal/node/index.ts'
+import * as WorkNodeInvariant from '../../../src/internal/node/invariant.ts'
 
 const node = (revision = 1, state: WorkNode['state'] = 'online'): WorkNode => ({
   id: WorkNodeId('node-1'),

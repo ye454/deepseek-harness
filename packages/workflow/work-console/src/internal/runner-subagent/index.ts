@@ -6,9 +6,9 @@
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import type { SubagentRun, SubagentStopReason } from '@deepseek-ai/dsh-subagent'
-import { ExecutionThreadConflictError } from '@deepseek-ai/dsh-work-execution'
-import type { ExecutionStopReason, ExecutionThread, ExecutionThreadRef } from '@deepseek-ai/dsh-work-execution'
-import type { TaskWorkItem } from '@deepseek-ai/dsh-work-control'
+import { ExecutionThreadConflictError } from '../execution/index.ts'
+import type { ExecutionStopReason, ExecutionThread, ExecutionThreadRef } from '../execution/index.ts'
+import type { TaskWorkItem } from '../control/index.ts'
 import { buildBoundedWorkPrompt } from './prompt.ts'
 import type {
   RunOneShotRequest,
@@ -42,7 +42,7 @@ export class WorkSubagentRunner extends Service {
    * @returns provider facts in DSH registry order.
    */
   listRunners(): WorkRunnerDescriptor[] {
-    return this.ctx.subagents.list().map(name => {
+    return this.ctx.subagents.list().map((name) => {
       const provider = this.ctx.subagents.getProvider(name)
       /* v8 ignore next -- list() is derived from the same provider map used by getProvider(). */
       if (provider === undefined) throw new Error(`subagent provider '${name}' disappeared during discovery`)
@@ -109,7 +109,7 @@ export class WorkSubagentRunner extends Service {
         subagentSessionId: run.id,
       })
     } catch (error) {
-      await disposeAfterFailure(run, error)
+      return await disposeAfterFailure(run, error)
     }
 
     try {
@@ -126,7 +126,7 @@ export class WorkSubagentRunner extends Service {
       }
     } catch (error) {
       await this.settleUnknownIfStillRunning(running)
-      await disposeAfterFailure(run, error)
+      return await disposeAfterFailure(run, error)
     }
   }
 

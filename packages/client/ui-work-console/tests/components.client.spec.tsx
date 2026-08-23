@@ -125,7 +125,12 @@ describe('WorkConsoleTrigger', () => {
   it('opens wide and closes rail modes', () => {
     const openConsole = vi.fn()
     const base = props()
-    const wide: WorkConsoleTriggerProps = { ...base, wide: true, useStore: select => select({ open: false, selectedTaskId: null }), openConsole }
+    const wide: WorkConsoleTriggerProps = {
+      ...base,
+      wide: true,
+      useStore: select => select({ open: false, selectedTaskId: null }),
+      openConsole,
+    }
     const view = render(<WorkConsoleTrigger {...wide} />)
     fireEvent.click(screen.getByRole('button', { name: '全局工作台' }))
     expect(openConsole).toHaveBeenCalledWith(null)
@@ -237,7 +242,7 @@ describe('WorkConsoleRoot', () => {
     expect(loadExecutionPlan).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: '配置执行' }))
     await vi.waitFor(() => { expect(loadExecutionPlan).toHaveBeenCalledWith('dispatch-me') })
-    expect(screen.getByRole('button', { name: '+ 并行角色' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: '+ 并行角色' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '+ 并行角色' }))
     expect((screen.getByRole('combobox', { name: 'Runner 1' }) as HTMLSelectElement).value).toBe('codex')
     expect((screen.getByRole('combobox', { name: 'Runner 2' }) as HTMLSelectElement).value).toBe('claude-code')

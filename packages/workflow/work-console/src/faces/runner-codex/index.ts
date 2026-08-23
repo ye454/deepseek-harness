@@ -7,12 +7,13 @@ import type { Context } from '@deepseek-ai/cordis'
 import s from '@deepseek-ai/schemastery'
 import {
   DEFAULT_DISPOSE_GRACE_MS,
+  DEFAULT_CODEX_PERMISSION_MODE,
   startCodexRun,
 } from '@deepseek-ai/dsh-subagent-codex'
 import type { SubagentStopReason } from '@deepseek-ai/dsh-subagent'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
-import type { ExecutionStopReason } from '@deepseek-ai/dsh-work-execution'
-import type { WorkNodeRunnerHandle, WorkNodeRunnerStartRequest } from '@deepseek-ai/dsh-work-node-daemon'
+import type { ExecutionStopReason } from '../../internal/execution/index.ts'
+import type { WorkNodeRunnerHandle, WorkNodeRunnerStartRequest } from '../node-daemon/index.ts'
 
 export const name = 'work-node-runner-codex'
 export const inject = ['workNodeDaemon', 'subprocess']
@@ -68,6 +69,7 @@ async function startCodexDaemonRun(
     },
     {
       cwd: request.cwd,
+      permissionMode: DEFAULT_CODEX_PERMISSION_MODE,
       env: config.env,
       disposeGraceMs: config.disposeGraceMs,
       spawn: spec => ctx.subprocess.spawn(spec),
@@ -86,7 +88,7 @@ async function startCodexDaemonRun(
 
   const result: Promise<ExecutionStopReason> = run.result.then(
     value => mapStopReason(value.stopReason),
-    error => {
+    (error) => {
       ctx.logger.warn(`work-node-runner-codex: infrastructure failure after publication: ${renderError(error)}`)
       return 'unknown'
     },

@@ -1,8 +1,8 @@
 /** Client-neutral orchestration vocabulary. */
-import type { WorkItemId } from '@deepseek-ai/dsh-work-control'
-import type { WorkEnvironmentId } from '@deepseek-ai/dsh-work-environment'
-import type { ExecutionThreadId } from '@deepseek-ai/dsh-work-execution'
-import type { WorkNodeId } from '@deepseek-ai/dsh-work-node'
+import type { WorkItemId } from '../control/index.ts'
+import type { WorkEnvironmentId } from '../environment/index.ts'
+import type { ExecutionThreadId } from '../execution/index.ts'
+import type { WorkNodeId } from '../node/index.ts'
 
 /** One explicitly isolated one-shot execution role. */
 export interface WorkOrchestratorPlacement {

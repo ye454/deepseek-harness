@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 import type {} from '@deepseek-ai/dsh-host-webserver'
-import type {} from '../../src/index.ts'
+import type {} from '../../../../src/index.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { boot, installFailLoud, loadEnv, resolveConfigPath } from '@deepseek-ai/dsh-app-boot'
-import type { WorkNodeRunnerProvider } from '../../src/index.ts'
+import type { WorkNodeRunnerProvider } from '../../../../src/faces/node-daemon/index.ts'
 
 const NAME = 'work-node-daemon-loader-test'
 const [configPath] = process.argv.slice(2)
@@ -16,7 +16,7 @@ const fixtureRunner: WorkNodeRunnerProvider = {
   async start(request) {
     let settled = false
     let resolve!: (value: 'completed' | 'interrupted') => void
-    const result = new Promise<'completed' | 'interrupted'>(done => { resolve = done })
+    const result = new Promise<'completed' | 'interrupted'>((done) => { resolve = done })
     const timer = setTimeout(() => {
       settled = true
       resolve('completed')

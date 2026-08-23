@@ -2,12 +2,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
-import WorkControlService, { type TaskPriority, type TaskWorkItem } from '@deepseek-ai/dsh-work-control'
-import WorkExecutionService from '@deepseek-ai/dsh-work-execution'
-import WorkNodeRegistry from '@deepseek-ai/dsh-work-node'
-import WorkEnvironmentRegistry, { type WorkEnvironment } from '@deepseek-ai/dsh-work-environment'
-import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
-import WorkOrchestrator, { WorkOrchestratorError, WorkOrchestratorPartialStartError } from '../src/index.ts'
+import WorkControlService, { type TaskPriority, type TaskWorkItem } from '../../../src/internal/control/index.ts'
+import WorkExecutionService from '../../../src/internal/execution/index.ts'
+import WorkNodeRegistry from '../../../src/internal/node/index.ts'
+import WorkEnvironmentRegistry, { type WorkEnvironment } from '../../../src/internal/environment/index.ts'
+import { MemoryMediaPool, MemoryStorageBackend } from '../../../../../storage/storage-domain/tests/helpers/memory-backend.ts'
+import WorkOrchestrator, { WorkOrchestratorError, WorkOrchestratorPartialStartError } from '../../../src/internal/orchestrator/index.ts'
 
 async function harness() {
   const ctx = new Context()

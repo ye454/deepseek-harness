@@ -3,12 +3,12 @@
  * Durable Task/Thread/Binding/Gateway authorities remain in their existing packages.
  */
 import { Context, Service } from '@deepseek-ai/cordis'
-import type { TaskWorkItem } from '@deepseek-ai/dsh-work-control'
-import type { ExecutionThread } from '@deepseek-ai/dsh-work-execution'
-import type { WorkEnvironment } from '@deepseek-ai/dsh-work-environment'
-import type {} from '@deepseek-ai/dsh-work-node'
-import type { WorkNodeGateway } from '@deepseek-ai/dsh-work-node-gateway'
-import type { WorkHandoff } from '@deepseek-ai/dsh-work-runner-subagent'
+import type { TaskWorkItem } from '../control/index.ts'
+import type { ExecutionThread } from '../execution/index.ts'
+import type { WorkEnvironment } from '../environment/index.ts'
+import type {} from '../node/index.ts'
+import type { WorkNodeGateway } from '../../faces/node-gateway/index.ts'
+import type { WorkHandoff } from '../runner-subagent/index.ts'
 import type {
   StartWorkTaskRequest,
   StartWorkTaskResult,
@@ -81,7 +81,7 @@ export class WorkOrchestrator extends Service {
       leases.set(workspaceIsolationKey(environment), thread.id)
     }
 
-    const candidates: WorkExecutionCandidate[] = this.ctx.workEnvironments.list().map(environment => {
+    const candidates: WorkExecutionCandidate[] = this.ctx.workEnvironments.list().map((environment) => {
       const issues: WorkExecutionCandidateIssue[] = []
       if (environment.state === 'degraded') issues.push('environment-degraded')
       else if (environment.state === 'unavailable') issues.push('environment-unavailable')

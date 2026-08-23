@@ -7,7 +7,7 @@
 import { randomUUID } from 'node:crypto'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type { KvTable } from '@deepseek-ai/dsh-storage-domain'
-import type { TaskWorkItem, WorkItemId } from '@deepseek-ai/dsh-work-control'
+import type { TaskWorkItem, WorkItemId } from '../control/index.ts'
 import { workExecutionDomainSpec } from './spec.ts'
 import type { ExecutionThreadRecord } from './spec.ts'
 import type {
@@ -170,7 +170,7 @@ export class WorkExecutionService extends Service {
     request: BeginExecutionAttemptRequest,
   ): Promise<ExecutionThread> {
     const provider = requireText(request.provider, 'runner provider')
-    return await this.updateThread(expected, current => {
+    return await this.updateThread(expected, (current) => {
       if (current.state !== 'idle' || current.activeAttempt !== undefined) {
         throw new ExecutionThreadTransitionError(`thread '${expected.id}' is not idle`)
       }
@@ -203,7 +203,7 @@ export class WorkExecutionService extends Service {
     expected: ExecutionThreadRef,
     request: SettleExecutionAttemptRequest,
   ): Promise<ExecutionThread> {
-    return await this.updateThread(expected, current => {
+    return await this.updateThread(expected, (current) => {
       const activeAttempt = current.activeAttempt
       if (current.state !== 'running' || activeAttempt === undefined) {
         throw new ExecutionThreadTransitionError(`thread '${expected.id}' has no active attempt`)
@@ -229,7 +229,7 @@ export class WorkExecutionService extends Service {
    */
   async blockThread(expected: ExecutionThreadRef, reason: string): Promise<ExecutionThread> {
     const blocker = requireText(reason, 'blocker')
-    return await this.updateThread(expected, current => {
+    return await this.updateThread(expected, (current) => {
       if (current.state !== 'idle') {
         throw new ExecutionThreadTransitionError(`thread '${expected.id}' must be idle before blocking`)
       }
@@ -243,7 +243,7 @@ export class WorkExecutionService extends Service {
    * @returns the idle thread.
    */
   async resumeThread(expected: ExecutionThreadRef): Promise<ExecutionThread> {
-    return await this.updateThread(expected, current => {
+    return await this.updateThread(expected, (current) => {
       if (current.state !== 'blocked') {
         throw new ExecutionThreadTransitionError(`thread '${expected.id}' is not blocked`)
       }
@@ -274,7 +274,7 @@ export class WorkExecutionService extends Service {
     expected: ExecutionThreadRef,
     state: 'closed' | 'cancelled',
   ): Promise<ExecutionThread> {
-    return await this.updateThread(expected, current => {
+    return await this.updateThread(expected, (current) => {
       if (current.state !== 'idle' && current.state !== 'blocked') {
         throw new ExecutionThreadTransitionError(
           `thread '${expected.id}' must be inactive before ${state === 'closed' ? 'closing' : 'cancelling'}`,
@@ -290,7 +290,7 @@ export class WorkExecutionService extends Service {
     mutate: (current: ExecutionThread) => Omit<ExecutionThread, 'revision' | 'updatedAt'>
       & Partial<Pick<ExecutionThread, 'revision' | 'updatedAt'>>,
   ): Promise<ExecutionThread> {
-    const next = await this.requireTable().update(expected.id, record => {
+    const next = await this.requireTable().update(expected.id, (record) => {
       const current = asExecutionThread(record)
       assertRef(current, expected)
       const candidate = mutate(current)

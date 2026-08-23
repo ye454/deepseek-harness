@@ -1,16 +1,24 @@
 import { createHmac } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import CredentialProvider, { type CredentialInfo, type CredentialRef, type ResolvedCredential } from '@deepseek-ai/dsh-credentials'
+import CredentialProvider, {
+  type CredentialInfo,
+  type CredentialKey,
+  type CredentialRecord,
+  type CredentialRecordEntry,
+  type CredentialRecordInfo,
+  type CredentialRef,
+  type ResolvedCredential,
+} from '@deepseek-ai/dsh-credentials'
 import WebServer from '@deepseek-ai/dsh-host-webserver'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
-import WorkControlService from '@deepseek-ai/dsh-work-control'
-import WorkExecutionService from '@deepseek-ai/dsh-work-execution'
-import WorkEnvironmentRegistry from '@deepseek-ai/dsh-work-environment'
-import WorkNodeRegistry from '@deepseek-ai/dsh-work-node'
-import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
-import WorkNodeGateway from '../src/index.ts'
+import WorkControlService from '../../../src/internal/control/index.ts'
+import WorkExecutionService from '../../../src/internal/execution/index.ts'
+import WorkEnvironmentRegistry from '../../../src/internal/environment/index.ts'
+import WorkNodeRegistry from '../../../src/internal/node/index.ts'
+import { MemoryMediaPool, MemoryStorageBackend } from '../../../../../storage/storage-domain/tests/helpers/memory-backend.ts'
+import WorkNodeGateway from '../../../src/faces/node-gateway/index.ts'
 
 const SECRET = 'test-node-secret'
 const SECRET_REF = 'WORK_NODE_TEST_SECRET'
@@ -18,10 +26,6 @@ const FEATURES = ['execute', 'cancel', 'resume', 'environment-report'] as const
 const RUNNERS = ['codex', 'fixture-continuable'] as const
 
 class TestCredentials extends CredentialProvider {
-  constructor(ctx: Context) {
-    super(ctx)
-  }
-
   resolve(ref: CredentialRef): Promise<ResolvedCredential | undefined> {
     return Promise.resolve(String(ref) === SECRET_REF ? { value: SECRET, source: 'test' } : undefined)
   }
@@ -35,6 +39,29 @@ class TestCredentials extends CredentialProvider {
   }
 
   unset(): Promise<void> {
+    return Promise.reject(new Error('test credentials are read-only'))
+  }
+
+  readRecord(_key: CredentialKey): Promise<CredentialRecord | undefined> {
+    return Promise.resolve(undefined)
+  }
+
+  describeRecord(_key: CredentialKey): Promise<CredentialRecordInfo> {
+    return Promise.resolve({ configured: false, writable: false })
+  }
+
+  listRecords(): Promise<readonly CredentialRecordEntry[]> {
+    return Promise.resolve([])
+  }
+
+  modifyRecord(
+    _key: CredentialKey,
+    _mutate: (current: CredentialRecord | undefined) => Promise<CredentialRecord | undefined>,
+  ): Promise<CredentialRecord | undefined> {
+    return Promise.reject(new Error('test credentials are read-only'))
+  }
+
+  deleteRecord(_key: CredentialKey): Promise<void> {
     return Promise.reject(new Error('test credentials are read-only'))
   }
 }

@@ -3,11 +3,11 @@
  * The helper lives in the Orchestrator package so Environment/Runner/lease admission has one owner.
  */
 import type { Context } from '@deepseek-ai/cordis'
-import type { WorkItemId } from '@deepseek-ai/dsh-work-control'
-import type { ExecutionThread, ExecutionThreadId } from '@deepseek-ai/dsh-work-execution'
-import type { WorkEnvironment } from '@deepseek-ai/dsh-work-environment'
-import type { WorkNodeGateway } from '@deepseek-ai/dsh-work-node-gateway'
-import type { WorkHandoff } from '@deepseek-ai/dsh-work-runner-subagent'
+import type { WorkItemId } from '../control/index.ts'
+import type { ExecutionThread, ExecutionThreadId } from '../execution/index.ts'
+import type { WorkEnvironment } from '../environment/index.ts'
+import type { WorkNodeGateway } from '../../faces/node-gateway/index.ts'
+import type { WorkHandoff } from '../runner-subagent/index.ts'
 
 /** Exact durable coordinates for continuing an existing execution effort. */
 export interface ContinueWorkThreadRequest {

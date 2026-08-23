@@ -5,9 +5,9 @@
 
 import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { SessionId } from '@deepseek-ai/dsh-session'
-import type { ExecutionStopReason, ExecutionThreadId, RunnerMode } from '@deepseek-ai/dsh-work-execution'
-import type { WorkEnvironmentId, WorkEnvironmentSnapshot, WorkEnvironmentState } from '@deepseek-ai/dsh-work-environment'
-import type { WorkNodeFeature, WorkNodeId, WorkNodeState } from '@deepseek-ai/dsh-work-node'
+import type { ExecutionStopReason, ExecutionThreadId, RunnerMode } from '../../internal/execution/index.ts'
+import type { WorkEnvironmentId, WorkEnvironmentSnapshot, WorkEnvironmentState } from '../../internal/environment/index.ts'
+import type { WorkNodeFeature, WorkNodeId, WorkNodeState } from '../../internal/node/index.ts'
 
 /** Stable identity of one durable command delivered to a remote node. */
 export type RemoteNodeCommandId = Branded<'RemoteNodeCommandId'>
@@ -56,33 +56,33 @@ export interface RemoteCancelPayload {
 /** One durable outbound command. */
 export type RemoteNodeCommand =
   | {
-      readonly id: RemoteNodeCommandId
-      readonly nodeId: WorkNodeId
-      readonly kind: 'execute' | 'resume'
-      readonly state: RemoteNodeCommandState
-      readonly payload: RemoteExecutePayload
-      /** Child/native session published by the remote Runner after acceptance. */
-      readonly publishedSessionId?: SessionId
-      /** ExecutionThread revision immediately after the accepted attempt was recorded. */
-      readonly acceptedThreadRevision?: number
-      readonly resultStopReason?: ExecutionStopReason
-      /** Stable machine-readable reason when delivery or remote admission rejects the command. */
-      readonly failureCode?: string
-      readonly createdAt: string
-      readonly updatedAt: string
-      readonly settledAt?: string
-    }
+    readonly id: RemoteNodeCommandId
+    readonly nodeId: WorkNodeId
+    readonly kind: 'execute' | 'resume'
+    readonly state: RemoteNodeCommandState
+    readonly payload: RemoteExecutePayload
+    /** Child/native session published by the remote Runner after acceptance. */
+    readonly publishedSessionId?: SessionId
+    /** ExecutionThread revision immediately after the accepted attempt was recorded. */
+    readonly acceptedThreadRevision?: number
+    readonly resultStopReason?: ExecutionStopReason
+    /** Stable machine-readable reason when delivery or remote admission rejects the command. */
+    readonly failureCode?: string
+    readonly createdAt: string
+    readonly updatedAt: string
+    readonly settledAt?: string
+  }
   | {
-      readonly id: RemoteNodeCommandId
-      readonly nodeId: WorkNodeId
-      readonly kind: 'cancel'
-      readonly state: RemoteNodeCommandState
-      readonly payload: RemoteCancelPayload
-      readonly failureCode?: string
-      readonly createdAt: string
-      readonly updatedAt: string
-      readonly settledAt?: string
-    }
+    readonly id: RemoteNodeCommandId
+    readonly nodeId: WorkNodeId
+    readonly kind: 'cancel'
+    readonly state: RemoteNodeCommandState
+    readonly payload: RemoteCancelPayload
+    readonly failureCode?: string
+    readonly createdAt: string
+    readonly updatedAt: string
+    readonly settledAt?: string
+  }
 
 /** Post-commit command notification used by observers and the package invariant. */
 export interface RemoteNodeCommandChanged {

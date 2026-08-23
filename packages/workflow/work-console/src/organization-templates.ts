@@ -1,5 +1,5 @@
 /** Deterministic zero-token organization templates for Work Console V1. */
-import type { OrganizeTaskRequest } from '@deepseek-ai/dsh-work-control'
+import type { OrganizeTaskRequest } from './internal/control/index.ts'
 import type { WorkConsoleTaskType } from './intake-types.ts'
 
 /** Build a fresh mutable-independent organization request for one selected task type. */

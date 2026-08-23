@@ -223,7 +223,7 @@ export async function disposeCodexChild(
  * @returns the published run after initialization and ephemeral thread creation.
  */
 export async function startCodexRun(
-  request: SubagentStartRequest,
+  request: Pick<SubagentStartRequest, 'prompt' | 'signal'>,
   spec: CodexRunSpec,
 ): Promise<SubagentRun> {
   const texts = textTask(request.prompt)

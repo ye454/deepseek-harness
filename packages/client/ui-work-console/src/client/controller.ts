@@ -98,8 +98,9 @@ export class WorkConsoleController {
         })
         return undefined
       }
-      this.publish({ ...this.state, detailLoading: false, detail: result.value })
-      return result.value
+      const detail = result.value ?? undefined
+      this.publish({ ...this.state, detailLoading: false, detail })
+      return detail
     } catch (error) {
       if (epoch !== this.detailEpoch) return this.state.detail
       this.publish({ ...this.state, detailLoading: false, error: renderError(error) })
@@ -116,7 +117,7 @@ export class WorkConsoleController {
         this.publish({ ...this.state, error: `workConsole.executionPlan: ${transport.error.code}: ${transport.error.message}` })
         return undefined
       }
-      return transport.value
+      return transport.value ?? undefined
     } catch (error) {
       this.publish({ ...this.state, error: renderError(error) })
       return undefined
@@ -257,8 +258,15 @@ function renderCommandFailure(error: WorkConsoleCommandFailure): string {
     case 'not-ready': return error.reason === 'automated-failed'
       ? '自动验收未通过，不能进入人工通过流程'
       : '自动验收尚未完成，暂不能人工通过'
+    default: return assertNever(error, 'WorkConsoleCommandFailure')
   }
 }
+
+/* v8 ignore start -- closed-union backstop is unreachable without violating the TypeScript contract */
+function assertNever(value: never, label: string): never {
+  throw new TypeError(`unknown ${label}: ${String(value)}`)
+}
+/* v8 ignore stop */
 
 function renderError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)

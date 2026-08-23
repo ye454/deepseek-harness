@@ -12,13 +12,13 @@
     backend: json
 
 - id: work-control
-  name: '@deepseek-ai/dsh-work-control'
+  name: '../../../../src/internal/control/index.ts'
 
 - id: work-execution
-  name: '@deepseek-ai/dsh-work-execution'
+  name: '../../../../src/internal/execution/index.ts'
 
 - id: work-node
-  name: '@deepseek-ai/dsh-work-node'
+  name: '../../../../src/internal/node/index.ts'
 
 - id: work-environment
-  name: '@deepseek-ai/dsh-work-environment'
+  name: '../../../../src/internal/environment/index.ts'

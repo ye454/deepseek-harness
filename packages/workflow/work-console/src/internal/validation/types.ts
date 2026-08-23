@@ -8,7 +8,7 @@ import type {
   ValidatorKind,
   ValidatorRequirement,
   WorkItemId,
-} from '@deepseek-ai/dsh-work-control'
+} from '../control/index.ts'
 
 /** Evidence stays as a reference to an auditable artifact or observation, never an embedded transcript. */
 export type EvidenceKind =

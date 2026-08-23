@@ -4,7 +4,7 @@ import {
   WorkItemConflictError,
   WorkItemId,
   WorkItemTransitionError,
-} from '@deepseek-ai/dsh-work-control'
+} from './internal/control/index.ts'
 import type {
   CreateWorkConsoleIdeaRequest,
   CreateWorkConsoleIdeaResult,

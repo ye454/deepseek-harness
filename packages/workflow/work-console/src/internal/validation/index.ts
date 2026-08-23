@@ -16,7 +16,7 @@ import {
   type ValidatorSpec,
   type WorkItemId,
   type WorkItemRef,
-} from '@deepseek-ai/dsh-work-control'
+} from '../control/index.ts'
 import { workValidationDomainSpec } from './spec.ts'
 import type { WorkValidationSessionRecord, WorkValidatorResultRecord } from './spec.ts'
 import type {
@@ -133,6 +133,7 @@ export class WorkValidationService extends Service {
       if (evidence.length === 0) {
         throw new WorkValidationError('automated validation requires at least one Evidence reference')
       }
+      const note = normalizeOptional(request.note)
       const result = await this.storeResult({
         task: context.task,
         session: context.session,
@@ -141,7 +142,7 @@ export class WorkValidationService extends Service {
         outcome: request.outcome,
         source: 'automation',
         evidence,
-        note: normalizeOptional(request.note),
+        ...(note === undefined ? {} : { note }),
       })
       await this.refreshSummary(context.task.id, context.session)
       return result
@@ -159,6 +160,7 @@ export class WorkValidationService extends Service {
         throw new WorkValidationError('recordUserAcceptance requires a user-acceptance policy entry')
       }
       const actor = requireText(request.actor, 'user acceptance actor')
+      const note = normalizeOptional(request.note)
       const result = await this.storeResult({
         task: context.task,
         session: context.session,
@@ -168,7 +170,7 @@ export class WorkValidationService extends Service {
         source: 'user',
         actor,
         evidence: normalizeEvidence(request.evidence ?? []),
-        note: normalizeOptional(request.note),
+        ...(note === undefined ? {} : { note }),
       })
       await this.refreshSummary(context.task.id, context.session)
       return result
@@ -317,7 +319,7 @@ export class WorkValidationService extends Service {
   private async withTaskLock<T>(taskId: WorkItemId, operation: () => Promise<T>): Promise<T> {
     const previous = this.taskTails.get(taskId) ?? Promise.resolve()
     let release!: () => void
-    const next = new Promise<void>(resolve => { release = resolve })
+    const next = new Promise<void>((resolve) => { release = resolve })
     const tail = previous.then(() => next, () => next)
     this.taskTails.set(taskId, tail)
     await previous.catch(() => {})
@@ -367,11 +369,12 @@ function normalizeEvidence(values: readonly EvidenceRef[]): EvidenceRef[] {
   const normalized: EvidenceRef[] = []
   const seen = new Set<string>()
   for (const value of values) {
+    const summary = normalizeOptional(value.summary)
     const item: EvidenceRef = {
       kind: value.kind,
       label: requireText(value.label, 'Evidence label'),
       reference: requireText(value.reference, 'Evidence reference'),
-      ...(normalizeOptional(value.summary) === undefined ? {} : { summary: normalizeOptional(value.summary)! }),
+      ...(summary === undefined ? {} : { summary }),
     }
     const key = `${item.kind}\n${item.reference}`
     if (seen.has(key)) continue

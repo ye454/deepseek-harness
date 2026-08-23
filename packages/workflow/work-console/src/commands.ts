@@ -6,8 +6,8 @@ import {
   WorkItemId,
   WorkItemTransitionError,
   type TaskWorkItem,
-} from '@deepseek-ai/dsh-work-control'
-import { WorkValidationError } from '@deepseek-ai/dsh-work-validation'
+} from './internal/control/index.ts'
+import { WorkValidationError } from './internal/validation/index.ts'
 import type {
   DecideWorkConsoleAcceptanceRequest,
   DecideWorkConsoleAcceptanceResult,
@@ -20,7 +20,7 @@ import type {
   WorkConsoleCommandSuccess,
 } from './types.ts'
 
-const acceptanceTailsByContext = new WeakMap<Context, Map<string, Promise<void>>>()
+const acceptanceTailsByTask = new Map<string, Promise<void>>()
 
 /** Promote one passive Idea into `organizing`; no Runner/model/environment is started here. */
 export async function promoteWorkConsoleIdea(
@@ -64,7 +64,7 @@ export async function decideWorkConsoleAcceptance(
   request: DecideWorkConsoleAcceptanceRequest,
 ): Promise<DecideWorkConsoleAcceptanceResult> {
   const taskId = WorkItemId(request.taskId)
-  return await withAcceptanceLock(ctx, String(taskId), async () => {
+  return await withAcceptanceLock(String(taskId), async () => {
     const inspected = inspectAcceptanceRequest(ctx, request, taskId)
     if (!inspected.ok) return inspected
 
@@ -232,27 +232,20 @@ async function returnToExecution(
 }
 
 async function withAcceptanceLock<T>(
-  ctx: Context,
   taskId: string,
   operation: () => Promise<T>,
 ): Promise<T> {
-  let tails = acceptanceTailsByContext.get(ctx)
-  if (tails === undefined) {
-    tails = new Map<string, Promise<void>>()
-    acceptanceTailsByContext.set(ctx, tails)
-  }
-  const previous = tails.get(taskId) ?? Promise.resolve()
+  const previous = acceptanceTailsByTask.get(taskId) ?? Promise.resolve()
   let release!: () => void
-  const next = new Promise<void>(resolve => { release = resolve })
+  const next = new Promise<void>((resolve) => { release = resolve })
   const tail = previous.then(() => next)
-  tails.set(taskId, tail)
+  acceptanceTailsByTask.set(taskId, tail)
   await previous
   try {
     return await operation()
   } finally {
     release()
-    if (tails.get(taskId) === tail) tails.delete(taskId)
-    if (tails.size === 0) acceptanceTailsByContext.delete(ctx)
+    if (acceptanceTailsByTask.get(taskId) === tail) acceptanceTailsByTask.delete(taskId)
   }
 }
 

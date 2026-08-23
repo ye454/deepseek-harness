@@ -2,12 +2,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
-import WorkControlService from '@deepseek-ai/dsh-work-control'
-import WorkExecutionService from '@deepseek-ai/dsh-work-execution'
-import WorkEnvironmentRegistry from '@deepseek-ai/dsh-work-environment'
-import WorkNodeRegistry from '@deepseek-ai/dsh-work-node'
-import WorkOrchestrator from '@deepseek-ai/dsh-work-orchestrator'
-import WorkValidationService from '@deepseek-ai/dsh-work-validation'
+import WorkControlService from '../src/internal/control/index.ts'
+import WorkExecutionService from '../src/internal/execution/index.ts'
+import WorkEnvironmentRegistry from '../src/internal/environment/index.ts'
+import WorkNodeRegistry from '../src/internal/node/index.ts'
+import WorkOrchestrator from '../src/internal/orchestrator/index.ts'
+import WorkValidationService from '../src/internal/validation/index.ts'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 import WorkConsoleGateway from '../src/index.ts'
 
@@ -111,7 +111,7 @@ describe('WorkConsole execution plan boundary', () => {
     expect(result).toMatchObject({ ok: true, value: { taskId: String(task.id), started: [{ provider: 'codex', role: '修复并运行验证' }] } })
     expect(ctx.workExecution.list(task.id)).toHaveLength(1)
     expect(enqueueExecute).toHaveBeenCalledOnce()
-    expect(ctx.workConsole.executionPlan(String(task.id))).toBeUndefined()
+    expect(ctx.workConsole.executionPlan(String(task.id))).toBeNull()
     await ctx.fiber.dispose()
   })
 
@@ -119,12 +119,12 @@ describe('WorkConsole execution plan boundary', () => {
     const { ctx } = await harness({ orchestrator: true })
     const idea = await ctx.workControl.createIdea({ title: 'organizing' })
     const organizing = await ctx.workControl.promoteIdea({ id: idea.id, revision: idea.revision }, { priority: 'p2' })
-    expect(ctx.workConsole.executionPlan(String(organizing.id))).toBeUndefined()
+    expect(ctx.workConsole.executionPlan(String(organizing.id))).toBeNull()
 
     const task = await organizedTask(ctx)
     await readyEnvironment(ctx)
     await ctx.workExecution.createThread({ taskId: task.id })
-    expect(ctx.workConsole.executionPlan(String(task.id))).toBeUndefined()
+    expect(ctx.workConsole.executionPlan(String(task.id))).toBeNull()
     await ctx.fiber.dispose()
   })
 })

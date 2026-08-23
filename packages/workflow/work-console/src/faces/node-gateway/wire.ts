@@ -5,7 +5,7 @@
 
 import { z } from 'zod'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import { workEnvironmentSnapshot } from '@deepseek-ai/dsh-work-environment'
+import { workEnvironmentSnapshot } from '../../internal/environment/index.ts'
 import type { RemoteNodeCommandId } from './types.ts'
 
 const feature = z.enum([

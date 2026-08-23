@@ -6,10 +6,10 @@
 import { z } from 'zod'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
-import { workEnvironmentSnapshot } from '@deepseek-ai/dsh-work-environment'
-import type { ExecutionThreadId } from '@deepseek-ai/dsh-work-execution'
-import type { WorkEnvironmentId } from '@deepseek-ai/dsh-work-environment'
-import type { WorkNodeId } from '@deepseek-ai/dsh-work-node'
+import { workEnvironmentSnapshot } from '../../internal/environment/index.ts'
+import type { ExecutionThreadId } from '../../internal/execution/index.ts'
+import type { WorkEnvironmentId } from '../../internal/environment/index.ts'
+import type { WorkNodeId } from '../../internal/node/index.ts'
 import type { RemoteNodeCommandId } from './types.ts'
 
 const commandId = z.string().transform(value => value as RemoteNodeCommandId)
@@ -99,7 +99,7 @@ export type RemoteEnvironmentIdentityRecord = z.infer<typeof remoteEnvironmentId
 
 /** Durable identity and command queue for the HTTP pull gateway. */
 export const workNodeGatewayDomainSpec = defineDomain({
-  name: 'work-node-gateway',
+  name: 'work_node_gateway',
   version: 1,
   tables: {
     nodes: domainTable<string, RemoteNodeIdentityRecord>(remoteNodeIdentityRecord),

@@ -10,11 +10,11 @@ import WorkControlService, {
   WorkItemTransitionError,
   type TaskWorkItem,
   type ValidatorSpec,
-} from '@deepseek-ai/dsh-work-control'
-import WorkExecutionService from '@deepseek-ai/dsh-work-execution'
-import WorkEnvironmentRegistry from '@deepseek-ai/dsh-work-environment'
-import WorkNodeRegistry from '@deepseek-ai/dsh-work-node'
-import WorkValidationService, { WorkValidationError } from '@deepseek-ai/dsh-work-validation'
+} from '../src/internal/control/index.ts'
+import WorkExecutionService from '../src/internal/execution/index.ts'
+import WorkEnvironmentRegistry from '../src/internal/environment/index.ts'
+import WorkNodeRegistry from '../src/internal/node/index.ts'
+import WorkValidationService, { WorkValidationError } from '../src/internal/validation/index.ts'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 import WorkConsoleGateway from '../src/index.ts'
 

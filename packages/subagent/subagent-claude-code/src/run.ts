@@ -375,7 +375,7 @@ export function claudeQueryOptions(
  * @returns the published run after both Query and real CLI handle exist.
  */
 export async function startClaudeCodeRun(
-  request: SubagentStartRequest,
+  request: Pick<SubagentStartRequest, 'prompt' | 'signal'>,
   spec: ClaudeCodeRunSpec,
 ): Promise<SubagentRun> {
   const prompt = textTask(request.prompt)

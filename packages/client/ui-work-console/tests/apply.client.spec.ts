@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { Context } from '@deepseek-ai/cordis'
+import { Context, Service } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
 import type { WorkConsoleSnapshot, WorkConsoleTaskDetail } from '@deepseek-ai/dsh-api-remotes/client'
@@ -55,18 +55,23 @@ async function bench() {
     ok: true,
     value: { ok: true, value: { taskId: 'task-p0', revision: 2, status: 'done', decision: 'accept' } },
   })
-  ctx.provide('remote', {
-    workConsole: {
-      snapshot: snapshotRemote,
-      task: taskRemote,
-      createIdea: createRemote,
-      promoteIdea: promoteRemote,
-      organizeTask: organizeRemote,
-      decideAcceptance: decideRemote,
-    },
-  } as never)
+  class RemoteService extends Service {
+    constructor(serviceCtx: Context) {
+      super(serviceCtx, 'remote')
+    }
+  }
+  new RemoteService(ctx)
+  ctx.provide('remote.workConsole', {
+    snapshot: snapshotRemote,
+    task: taskRemote,
+    createIdea: createRemote,
+    promoteIdea: promoteRemote,
+    organizeTask: organizeRemote,
+    decideAcceptance: decideRemote,
+  })
 
   const parent = ctx.plugin({
+    inject: ['slots'],
     apply(parentCtx: Context) {
       return parentCtx.slots.register({
         name: 'root',
@@ -78,12 +83,15 @@ async function bench() {
     },
   })
   await parent.await()
-  const fiber = ctx.plugin({ apply })
+  const fiber = ctx.plugin({ inject: [...inject], apply })
   await fiber.await()
   return { ctx, fiber, parent, snapshotRemote, taskRemote, createRemote, promoteRemote, organizeRemote, decideRemote }
 }
 
-function injectedFace(ctx: Context, actions: { open: () => void; close: () => void; selectTask: (taskId: string | null) => void }): WorkConsoleInjected {
+function injectedFace(
+  ctx: Context,
+  actions: { open: () => void; close: () => void; selectTask: (taskId: string | null) => void },
+): WorkConsoleInjected {
   const entry = ctx.slots.entries('shell.overlay')[0]!
   return (entry.inject as (bound: never) => WorkConsoleInjected)(actions as never)
 }
@@ -140,8 +148,10 @@ describe('ui-work-console client apply', () => {
     snapshotRemote.mockResolvedValueOnce({ ok: true, value: { ...snapshot, tasks: [] } })
 
     face.refreshConsole('task-p0')
-    await vi.waitFor(() => { expect(snapshotRemote).toHaveBeenCalledOnce() })
-    expect(actions.selectTask).toHaveBeenCalledWith(null)
+    await vi.waitFor(() => {
+      expect(snapshotRemote).toHaveBeenCalledOnce()
+      expect(actions.selectTask).toHaveBeenCalledWith(null)
+    })
     expect(taskRemote).not.toHaveBeenCalled()
   })
 

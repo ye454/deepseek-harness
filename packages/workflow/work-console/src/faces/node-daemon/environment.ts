@@ -6,7 +6,7 @@
 import { realpath, stat } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-subprocess'
-import type { WorkEnvironmentSnapshot } from '@deepseek-ai/dsh-work-environment'
+import type { WorkEnvironmentSnapshot } from '../../internal/environment/index.ts'
 import type { WorkNodeDaemonEnvironmentConfig, WorkNodeDaemonEnvironmentReport } from './types.ts'
 
 /** Environment collector deployment options. */

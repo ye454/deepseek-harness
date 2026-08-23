@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type SubprocessRuntime from '@deepseek-ai/dsh-subprocess'
-import type WorkNodeDaemon from '@deepseek-ai/dsh-work-node-daemon'
-import type { WorkNodeRunnerProvider } from '@deepseek-ai/dsh-work-node-daemon'
-import { apply } from '../src/index.ts'
+import type WorkNodeDaemon from '../../../src/faces/node-daemon/index.ts'
+import type { WorkNodeRunnerProvider } from '../../../src/faces/node-daemon/index.ts'
+import { apply } from '../../../src/faces/runner-codex/index.ts'
 
 function fixture() {
   const ctx = new Context()

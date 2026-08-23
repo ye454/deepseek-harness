@@ -4,8 +4,8 @@
  */
 
 import type { Branded } from '@deepseek-ai/dsh-brand'
-import type { ExecutionThreadId } from '@deepseek-ai/dsh-work-execution'
-import type { WorkNodeId } from '@deepseek-ai/dsh-work-node'
+import type { ExecutionThreadId } from '../execution/index.ts'
+import type { WorkNodeId } from '../node/index.ts'
 
 /** Stable identity of one named execution environment on a work node. */
 export type WorkEnvironmentId = Branded<'WorkEnvironmentId'>

@@ -12,16 +12,16 @@ import {
   type TaskWorkItem,
   type WorkflowStage,
   type WorkItemId,
-} from '@deepseek-ai/dsh-work-control'
+} from '../control/index.ts'
 import {
   ExecutionThreadConflictError,
   type ExecutionThread,
-} from '@deepseek-ai/dsh-work-execution'
+} from '../execution/index.ts'
 import {
   continueWorkThread,
   type ContinueWorkThreadResult,
-} from '@deepseek-ai/dsh-work-orchestrator/continuation'
-import type { RemoteNodeCommand, RemoteNodeCommandChanged } from '@deepseek-ai/dsh-work-node-gateway'
+} from '../orchestrator/continuation.ts'
+import type { RemoteNodeCommand, RemoteNodeCommandChanged } from '../../faces/node-gateway/index.ts'
 
 export type WorkCoordinationState = 'ignored' | 'waiting' | 'continued' | 'validation' | 'blocked'
 
@@ -55,16 +55,16 @@ const MAX_RECONCILE_ATTEMPTS = 4
  * It owns no duplicate task/thread/environment database.
  */
 export class WorkExecutionCoordinator extends Service {
-  static inject = ['workControl', 'workExecution', 'workOrchestrator', 'workValidation']
+  static inject = ['workControl', 'workExecution', 'workEnvironments', 'workOrchestrator', 'workValidation']
 
   private readonly taskTails = new Map<WorkItemId, Promise<void>>()
 
   constructor(ctx: Context) {
     super(ctx, 'workExecutionCoordinator')
-    ctx.on('work-execution/changed', change => {
+    ctx.on('work-execution/changed', (change) => {
       this.schedule(change.thread.taskId)
     })
-    ctx.on('work-control/changed', change => {
+    ctx.on('work-control/changed', (change) => {
       if (change.item?.kind === 'task') this.schedule(change.item.id)
     })
     ctx.on('work-node-gateway/command-changed', (change: RemoteNodeCommandChanged) => {
@@ -146,7 +146,8 @@ export class WorkExecutionCoordinator extends Service {
     const threads = activeThreads(this.ctx.workExecution.list(item.id))
     const failed = threads.find(thread => threadFailureAtOrBeforeStage(thread, stage.id) !== undefined)
     if (failed !== undefined) {
-      return await this.blockTask(item, threads, threadFailureAtOrBeforeStage(failed, stage.id)!)
+      const reason = threadFailureAtOrBeforeStage(failed, stage.id)
+      if (reason !== undefined) return await this.blockTask(item, threads, reason)
     }
     const coordinateMissing = threads.find(thread => thread.state === 'idle' && thread.lastAttempt !== undefined && thread.lastAttempt.stageId === undefined)
     if (coordinateMissing !== undefined) {
@@ -182,8 +183,8 @@ export class WorkExecutionCoordinator extends Service {
     if (currentStageAttempts.length === 0) {
       return await this.continueCurrentStage(item, stage, threads)
     }
-    if (currentStageAttempts.some(thread => thread.lastAttempt?.stopReason !== 'completed')) {
-      const failedThread = currentStageAttempts.find(thread => thread.lastAttempt?.stopReason !== 'completed')!
+    const failedThread = currentStageAttempts.find(thread => thread.lastAttempt?.stopReason !== 'completed')
+    if (failedThread !== undefined) {
       return await this.blockTask(
         item,
         threads,
@@ -232,7 +233,10 @@ export class WorkExecutionCoordinator extends Service {
     stage: WorkflowStage,
     completedThreads: readonly ExecutionThread[],
   ): Promise<WorkCoordinationResult> {
-    const workflow = task.workflow!
+    const workflow = task.workflow
+    if (workflow === undefined) {
+      return await this.blockTask(task, completedThreads, 'task has no workflow while advancing a completed stage')
+    }
     const index = workflow.stages.findIndex(candidate => candidate.id === stage.id)
     const next = workflow.stages[index + 1]
     const primary = choosePrimary(completedThreads)
@@ -363,7 +367,7 @@ export class WorkExecutionCoordinator extends Service {
   private async withTaskLock<T>(taskId: WorkItemId, operation: () => Promise<T>): Promise<T> {
     const previous = this.taskTails.get(taskId) ?? Promise.resolve()
     let release!: () => void
-    const next = new Promise<void>(resolve => { release = resolve })
+    const next = new Promise<void>((resolve) => { release = resolve })
     const tail = previous.then(() => next, () => next)
     this.taskTails.set(taskId, tail)
     await previous.catch(() => {})

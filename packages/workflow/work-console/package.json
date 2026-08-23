@@ -1,13 +1,21 @@
 {
   "name": "@deepseek-ai/dsh-work-console",
   "description": "Single DSH bundle for global continuous work: durable task control, execution, resources, orchestration, validation, coordination, remote runners, and Web console",
-  "version": "0.1.0-rc.5",
-  "private": true,
+  "version": "0.1.1-rc.2",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "directory": "packages/workflow/work-console"
+  },
   "type": "module",
-  "main": "lib/startup.js",
-  "types": "lib/types/startup.d.ts",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
   "exports": {
-    ".": { "types": "./lib/types/startup.d.ts", "default": "./lib/startup.js" },
+    ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" },
+    "./startup": { "types": "./lib/types/startup.d.ts", "default": "./lib/startup.js" },
     "./console": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" },
     "./invariant": { "types": "./lib/types/invariant.d.ts", "default": "./lib/invariant.js" },
     "./types": { "types": "./lib/types/types.d.ts", "default": "./lib/types/types.js" },
@@ -20,9 +28,16 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "lib/**/*.js",
-    "lib/**/*.d.ts",
-    "cordis.patch.yml"
+    "lib/index.js",
+    "lib/invariant.js",
+    "lib/startup.js",
+    "cordis.patch.yml",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts",
+    "lib/typert.host.js",
+    "lib/typert.host.d.ts",
+    "lib/typert.remote-client.js",
+    "lib/typert.remote-client.d.ts"
   ],
   "license": "MIT",
   "dsh": {

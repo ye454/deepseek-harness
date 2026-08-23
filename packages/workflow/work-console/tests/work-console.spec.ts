@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
-import WorkControlService from '@deepseek-ai/dsh-work-control'
-import WorkExecutionService from '@deepseek-ai/dsh-work-execution'
-import WorkEnvironmentRegistry from '@deepseek-ai/dsh-work-environment'
-import WorkNodeRegistry from '@deepseek-ai/dsh-work-node'
-import WorkValidationService from '@deepseek-ai/dsh-work-validation'
+import WorkControlService from '../src/internal/control/index.ts'
+import WorkExecutionService from '../src/internal/execution/index.ts'
+import WorkEnvironmentRegistry from '../src/internal/environment/index.ts'
+import WorkNodeRegistry from '../src/internal/node/index.ts'
+import WorkValidationService from '../src/internal/validation/index.ts'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 import WorkConsoleGateway from '../src/index.ts'
 
@@ -42,9 +42,9 @@ async function organizedTask(ctx: Context, title: string, priority: 'p0' | 'p1' 
       version: 1,
       validators: withUserGate
         ? [
-            { kind: 'smoke-test', requirement: 'required', label: 'Remote smoke' },
-            { kind: 'user-acceptance', requirement: 'required', label: 'User accepts' },
-          ]
+          { kind: 'smoke-test', requirement: 'required', label: 'Remote smoke' },
+          { kind: 'user-acceptance', requirement: 'required', label: 'User accepts' },
+        ]
         : [],
     },
   })
@@ -189,7 +189,7 @@ describe('WorkConsoleGateway global projection', () => {
       evidence: [{ reference: 'ci:current' }],
     })
     expect(detail?.validators[0]?.evidence.map(item => item.reference)).not.toContain('ci:old')
-    expect(detail?.validators[1]).toMatchObject({ label: 'User accepts', outcome: undefined, evidence: [] })
+    expect(detail?.validators[1]).toMatchObject({ label: 'User accepts', evidence: [] })
     expect(JSON.stringify(detail)).not.toContain('NODE_TOKEN')
     expect(detail?.environments[0]).toMatchObject({
       name: 'Worker Env',
@@ -205,7 +205,7 @@ describe('WorkConsoleGateway global projection', () => {
     const task = await organizedTask(ctx, 'Cancelled experiment', 'p2')
     await ctx.workControl.setStatus({ id: task.id, revision: task.revision }, 'cancelled')
     expect(ctx.workConsole.snapshot().tasks).toEqual([])
-    expect(ctx.workConsole.task(String(task.id))).toBeUndefined()
+    expect(ctx.workConsole.task(String(task.id))).toBeNull()
     await ctx.fiber.dispose()
   })
 })

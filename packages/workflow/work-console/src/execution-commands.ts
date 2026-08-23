@@ -1,12 +1,12 @@
 /** Host-owned Work Console execution-plan command. */
 import type { Context } from '@deepseek-ai/cordis'
-import { WorkItemId } from '@deepseek-ai/dsh-work-control'
-import { WorkEnvironmentId } from '@deepseek-ai/dsh-work-environment'
+import { WorkItemId } from './internal/control/index.ts'
+import { WorkEnvironmentId } from './internal/environment/index.ts'
 import {
   WorkOrchestratorError,
   WorkOrchestratorPartialStartError,
   type WorkOrchestrator,
-} from '@deepseek-ai/dsh-work-orchestrator'
+} from './internal/orchestrator/index.ts'
 import type {
   StartWorkConsoleExecutionRequest,
   StartWorkConsoleExecutionResult,

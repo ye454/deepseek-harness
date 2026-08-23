@@ -30,7 +30,7 @@ export const workflowStageRecord = z.object({
 
 export const workflowPlanRecord = z.object({
   version: z.literal(1),
-  stages: z.array(workflowStageRecord).min(1),
+  stages: z.array(workflowStageRecord).min(1).readonly(),
 })
 
 export const validatorSpecRecord = z.object({
@@ -41,7 +41,7 @@ export const validatorSpecRecord = z.object({
 
 export const validationPolicyRecord = z.object({
   version: z.literal(1),
-  validators: z.array(validatorSpecRecord),
+  validators: z.array(validatorSpecRecord).readonly(),
 })
 
 export const validationSummaryRecord = z.object({
@@ -55,7 +55,7 @@ const common = {
   id: workItemId,
   title: z.string().min(1),
   summary: z.string(),
-  tags: z.array(z.string()),
+  tags: z.array(z.string()).readonly(),
   revision: z.number().int().positive(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -83,7 +83,7 @@ export const workItemRecord = z.discriminatedUnion('kind', [ideaWorkItemRecord, 
 export type WorkItemRecord = z.infer<typeof workItemRecord>
 
 export const workControlDomainSpec = defineDomain({
-  name: 'work-control',
+  name: 'work_control',
   version: 1,
   tables: {
     items: domainTable<WorkItemId, WorkItemRecord>(workItemRecord),

@@ -27,6 +27,13 @@ import {
   type CodexRunSpec,
 } from './run.ts'
 
+export {
+  DEFAULT_CODEX_PERMISSION_MODE,
+  DEFAULT_DISPOSE_GRACE_MS,
+  startCodexRun,
+} from './run.ts'
+export type { CodexRunSpec, CodexPermissionMode } from './run.ts'
+
 export const name = 'subagent-codex'
 export const inject = ['subagents', 'subprocess']
 

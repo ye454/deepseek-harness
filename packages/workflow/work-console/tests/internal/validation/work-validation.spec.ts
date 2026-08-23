@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
-import WorkControlService, { type TaskWorkItem, type WorkItemId } from '@deepseek-ai/dsh-work-control'
-import WorkValidationService from '../src/index.ts'
-import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
+import WorkControlService, { type TaskWorkItem, type WorkItemId } from '../../../src/internal/control/index.ts'
+import WorkValidationService from '../../../src/internal/validation/index.ts'
+import { MemoryMediaPool, MemoryStorageBackend } from '../../../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 
 async function harness() {
   const ctx = new Context()

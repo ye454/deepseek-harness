@@ -7,11 +7,17 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
-import { WorkItemId, type IdeaWorkItem, type TaskWorkItem } from '@deepseek-ai/dsh-work-control'
-import type { ExecutionThread } from '@deepseek-ai/dsh-work-execution'
-import type { WorkEnvironment } from '@deepseek-ai/dsh-work-environment'
-import type { WorkOrchestrator } from '@deepseek-ai/dsh-work-orchestrator'
-import type { WorkValidatorResult } from '@deepseek-ai/dsh-work-validation'
+import WorkControl from './internal/control/index.ts'
+import WorkEnvironmentService from './internal/environment/index.ts'
+import WorkExecution from './internal/execution/index.ts'
+import WorkExecutionCoordinator from './internal/execution-coordinator/index.ts'
+import WorkNode from './internal/node/index.ts'
+import WorkOrchestratorService from './internal/orchestrator/index.ts'
+import WorkValidation from './internal/validation/index.ts'
+import { WorkItemId, type IdeaWorkItem, type TaskWorkItem } from './internal/control/index.ts'
+import type { ExecutionThread } from './internal/execution/index.ts'
+import type { WorkEnvironment } from './internal/environment/index.ts'
+import type { WorkValidatorResult } from './internal/validation/index.ts'
 // Typert-generated ./typert and ./remote artifacts import Zod at runtime.
 import type {} from 'zod'
 import { decideWorkConsoleAcceptance, promoteWorkConsoleIdea } from './commands.ts'
@@ -55,6 +61,24 @@ export type * from './types.ts'
 export type * from './intake-types.ts'
 export type * from './execution-types.ts'
 
+/** Stable external plugin name. */
+export const name = 'work-console'
+
+/**
+ * Mount the Work Console domain services below one owning plugin fiber.
+ * @param ctx - Cordis context that owns the bundle.
+ */
+export function apply(ctx: Context): void {
+  ctx.plugin(WorkControl)
+  ctx.plugin(WorkExecution)
+  ctx.plugin(WorkNode)
+  ctx.plugin(WorkEnvironmentService)
+  ctx.plugin(WorkOrchestratorService)
+  ctx.plugin(WorkValidation)
+  ctx.plugin(WorkExecutionCoordinator)
+  ctx.plugin(WorkConsoleGateway)
+}
+
 /** Host Remote used by the browser work-console surface. */
 export class WorkConsoleGateway extends TypertRemoteService {
   static inject = ['workControl', 'workExecution', 'workNodes', 'workEnvironments', 'workValidation']
@@ -89,15 +113,15 @@ export class WorkConsoleGateway extends TypertRemoteService {
 
   /** Read zero-token execution candidates only while the Task is eligible for a fresh dispatch. */
   @Remote('executionPlan')
-  executionPlan(rawTaskId: string): WorkConsoleExecutionPlanSnapshot | undefined {
+  executionPlan(rawTaskId: string): WorkConsoleExecutionPlanSnapshot | null {
     const taskId = WorkItemId(rawTaskId)
     const item = this.ctx.workControl.get(taskId)
     if (item?.kind !== 'task' || item.status !== 'running' || item.workflow === undefined || item.currentStageId === undefined) {
-      return undefined
+      return null
     }
     const activeThreads = this.ctx.workExecution.list(taskId)
       .filter(thread => thread.state !== 'closed' && thread.state !== 'cancelled')
-    if (activeThreads.length > 0) return undefined
+    if (activeThreads.length > 0) return null
 
     const orchestrator = optionalOrchestrator(this.ctx)
     if (orchestrator === undefined) return { dispatchAvailable: false, candidates: [] }
@@ -156,14 +180,14 @@ export class WorkConsoleGateway extends TypertRemoteService {
    * @param rawTaskId - Stable WorkItem id from a task card.
    */
   @Remote('task')
-  task(rawTaskId: string): WorkConsoleTaskDetail | undefined {
+  task(rawTaskId: string): WorkConsoleTaskDetail | null {
     const taskId = WorkItemId(rawTaskId)
     const item = this.ctx.workControl.get(taskId)
-    if (item?.kind !== 'task' || item.status === 'cancelled') return undefined
+    if (item?.kind !== 'task' || item.status === 'cancelled') return null
 
     const threads = this.ctx.workExecution.list(taskId)
     const environmentMap = new Map<string, WorkEnvironment>()
-    const threadViews = threads.map(thread => {
+    const threadViews = threads.map((thread) => {
       const binding = this.ctx.workEnvironments.getBinding(thread.id)
       if (binding !== undefined) {
         const environment = this.ctx.workEnvironments.get(binding.environmentId)
@@ -252,8 +276,8 @@ export class WorkConsoleGateway extends TypertRemoteService {
   }
 }
 
-function optionalOrchestrator(ctx: Context): WorkOrchestrator | undefined {
-  return (ctx as unknown as { readonly workOrchestrator?: WorkOrchestrator }).workOrchestrator
+function optionalOrchestrator(ctx: Context): WorkOrchestratorService | undefined {
+  return (ctx as unknown as { readonly workOrchestrator?: WorkOrchestratorService }).workOrchestrator
 }
 
 function ideaCard(idea: IdeaWorkItem): WorkConsoleIdeaCard {
@@ -288,6 +312,7 @@ function chooseRelevantThread(threads: readonly ExecutionThread[]): ExecutionThr
 
 function executionView(threads: readonly ExecutionThread[], relevant: ExecutionThread | undefined): WorkConsoleExecutionView {
   const attempt = relevant?.activeAttempt ?? relevant?.lastAttempt
+  const lastStopReason = relevant?.lastAttempt?.stopReason
   return {
     threadCount: threads.length,
     runningThreadCount: threads.filter(thread => thread.state === 'running').length,
@@ -296,7 +321,7 @@ function executionView(threads: readonly ExecutionThread[], relevant: ExecutionT
       provider: attempt.provider,
       mode: attempt.mode,
       ...(relevant?.activeAttempt === undefined ? {} : { attemptStartedAt: attempt.startedAt }),
-      ...('stopReason' in attempt ? { lastStopReason: attempt.stopReason } : {}),
+      ...(lastStopReason === undefined ? {} : { lastStopReason }),
     }),
   }
 }
@@ -419,19 +444,18 @@ function validatorDetails(task: TaskWorkItem, results: readonly WorkValidatorRes
       kind: validator.kind,
       requirement: validator.requirement,
       label: validator.label,
+      ...(result?.outcome === undefined ? {} : { outcome: result.outcome }),
+      evidence: result === undefined ? [] : result.evidence.map(evidence => ({
+        kind: evidence.kind,
+        label: evidence.label,
+        reference: evidence.reference,
+        ...(evidence.summary === undefined ? {} : { summary: evidence.summary }),
+      })),
       ...(result === undefined ? {} : {
-        outcome: result.outcome,
         source: result.source,
         ...(result.actor === undefined ? {} : { actor: result.actor }),
         checkedAt: result.checkedAt,
-        evidence: result.evidence.map(evidence => ({
-          kind: evidence.kind,
-          label: evidence.label,
-          reference: evidence.reference,
-          ...(evidence.summary === undefined ? {} : { summary: evidence.summary }),
-        })),
       }),
-      ...(result === undefined ? { evidence: [] } : {}),
     }
   })
 }
@@ -441,6 +465,13 @@ function compareCards(left: WorkConsoleTaskCard, right: WorkConsoleTaskCard): nu
   return priority[left.priority] - priority[right.priority]
     || right.updatedAt.localeCompare(left.updatedAt)
     || left.title.localeCompare(right.title)
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Host-owned Work Console Remote service. */
+    workConsole: WorkConsoleGateway
+  }
 }
 
 export default WorkConsoleGateway

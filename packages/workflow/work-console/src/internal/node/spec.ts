@@ -26,8 +26,8 @@ export const workNodeRecord = z.object({
   name: z.string(),
   state: z.enum(['online', 'degraded', 'offline']),
   protocolVersion: z.number().int().positive(),
-  runnerProviders: z.array(z.string()),
-  features: z.array(workNodeFeature),
+  runnerProviders: z.array(z.string()).readonly(),
+  features: z.array(workNodeFeature).readonly(),
   degradedReason: z.string().optional(),
   lastSeenAt: z.string(),
   createdAt: z.string(),
@@ -39,7 +39,7 @@ export type WorkNodeRecord = z.infer<typeof workNodeRecord>
 
 /** One durable registry table keyed by {@link WorkNodeId}. */
 export const workNodeDomainSpec = defineDomain({
-  name: 'work-node',
+  name: 'work_node',
   version: 1,
   tables: {
     nodes: domainTable<WorkNodeId, WorkNodeRecord>(workNodeRecord),

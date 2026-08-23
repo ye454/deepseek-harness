@@ -6,7 +6,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-work-node-daemon'
+const PACKAGE_NAME = '@deepseek-ai/dsh-work-console/node-daemon'
 
 /** Cordis companion plugin name. */
 export const name = 'work-node-daemon-invariant'
@@ -16,7 +16,7 @@ export const inject = ['invariants']
 /** Every journal event must match the already-committed local durable record. */
 const install: InvariantInstaller = Object.assign(
   (ctx: Context, fail: (message: string) => never) => {
-    ctx.on('work-node-daemon/command-changed', change => {
+    ctx.on('work-node-daemon/command-changed', (change) => {
       const current = ctx.workNodeDaemon.getJournal(change.record.commandId)
       if (
         current === undefined

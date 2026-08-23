@@ -200,7 +200,7 @@ export class WorkControlService extends Service {
    */
   promoteIdea(expected: WorkItemRef, request: PromoteIdeaRequest = {}): Promise<TaskWorkItem> {
     return this.enqueueIdeaTransition(async () => {
-      const next = await this.requireTable().update(expected.id, record => {
+      const next = await this.requireTable().update(expected.id, (record) => {
         const current = asWorkItem(record)
         assertRef(current, expected)
         if (current.kind !== 'idea') {
@@ -236,7 +236,9 @@ export class WorkControlService extends Service {
   async organizeTask(expected: WorkItemRef, request: OrganizeTaskRequest): Promise<TaskWorkItem> {
     validateWorkflow(request.workflow)
     validateValidators(request.validationPolicy.validators)
-    const next = await this.requireTable().update(expected.id, record => {
+    const firstStage = request.workflow.stages[0]
+    if (firstStage === undefined) throw new WorkItemTransitionError('workflow must include at least one stage')
+    const next = await this.requireTable().update(expected.id, (record) => {
       const current = asWorkItem(record)
       assertRef(current, expected)
       if (current.kind !== 'task' || current.status !== 'organizing') {
@@ -249,7 +251,7 @@ export class WorkControlService extends Service {
         status: 'running',
         taskType: request.taskType,
         workflow: request.workflow,
-        currentStageId: request.workflow.stages[0]!.id,
+        currentStageId: firstStage.id,
         validationPolicy: request.validationPolicy,
         validation: initialValidation(request.validationPolicy.validators),
         updatedAt: now,
@@ -267,7 +269,7 @@ export class WorkControlService extends Service {
    * @returns the updated task.
    */
   async setStage(expected: WorkItemRef, stageId: string): Promise<TaskWorkItem> {
-    return await this.updateTask(expected, current => {
+    return await this.updateTask(expected, (current) => {
       if (current.workflow === undefined) {
         throw new WorkItemTransitionError(`task '${expected.id}' has not been organized`)
       }
@@ -287,7 +289,7 @@ export class WorkControlService extends Service {
    * @returns the updated task.
    */
   async setStatus(expected: WorkItemRef, status: TaskStatus): Promise<TaskWorkItem> {
-    return await this.updateTask(expected, current => {
+    return await this.updateTask(expected, (current) => {
       if (!isTaskStatusTransitionAllowed(current.status, status)) {
         throw new WorkItemTransitionError(`task '${expected.id}' cannot move from ${current.status} to ${status}`)
       }
@@ -310,7 +312,7 @@ export class WorkControlService extends Service {
    * @returns the updated task.
    */
   async setPriority(expected: WorkItemRef, priority: TaskPriority): Promise<TaskWorkItem> {
-    return await this.updateTask(expected, current => {
+    return await this.updateTask(expected, (current) => {
       if (current.status === 'done' || current.status === 'cancelled') {
         throw new WorkItemTransitionError(`terminal task '${expected.id}' cannot change priority`)
       }
@@ -326,7 +328,7 @@ export class WorkControlService extends Service {
    * @returns the updated task.
    */
   async setValidationSummary(expected: WorkItemRef, summary: ValidationSummary): Promise<TaskWorkItem> {
-    return await this.updateTask(expected, current => {
+    return await this.updateTask(expected, (current) => {
       const validators = current.validationPolicy?.validators
       if (validators === undefined) {
         throw new WorkItemTransitionError(`task '${expected.id}' has no validation policy`)
@@ -370,7 +372,7 @@ export class WorkControlService extends Service {
     })
   }
 
-  private list(): WorkItem[] {
+  list(): WorkItem[] {
     return [...this.requireTable().entries()]
       .map(([, item]) => asWorkItem(item))
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || String(left.id).localeCompare(String(right.id)))
@@ -381,7 +383,7 @@ export class WorkControlService extends Service {
     mutate: (current: TaskWorkItem) => Omit<TaskWorkItem, 'revision' | 'updatedAt'>
       & Partial<Pick<TaskWorkItem, 'revision' | 'updatedAt'>>,
   ): Promise<TaskWorkItem> {
-    const next = await this.requireTable().update(expected.id, record => {
+    const next = await this.requireTable().update(expected.id, (record) => {
       const current = asWorkItem(record)
       assertRef(current, expected)
       if (current.kind !== 'task') {

@@ -2,7 +2,7 @@
 
 import { createHmac } from 'node:crypto'
 import type {} from '@deepseek-ai/dsh-host-webserver'
-import type {} from '../../src/index.ts'
+import type {} from '../../../../src/index.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { boot, installFailLoud, loadEnv, resolveConfigPath } from '@deepseek-ai/dsh-app-boot'
 

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import InvariantRegistry from '@deepseek-ai/dsh-invariants'
-import type WorkNodeDaemon from '../src/index.ts'
-import type { WorkNodeDaemonJournalRecord } from '../src/index.ts'
-import * as WorkNodeDaemonInvariant from '../src/invariant.ts'
+import type WorkNodeDaemon from '../../../src/faces/node-daemon/index.ts'
+import type { WorkNodeDaemonJournalRecord } from '../../../src/faces/node-daemon/index.ts'
+import * as WorkNodeDaemonInvariant from '../../../src/faces/node-daemon/invariant.ts'
 
 const record = (state: WorkNodeDaemonJournalRecord['state'] = 'accepted'): WorkNodeDaemonJournalRecord => ({
   commandId: 'command-1' as never,

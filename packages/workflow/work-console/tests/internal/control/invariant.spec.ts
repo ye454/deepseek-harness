@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import InvariantRegistry from '@deepseek-ai/dsh-invariants'
-import type { WorkItem, WorkItemChanged } from '../src/index.ts'
-import { WorkItemId } from '../src/index.ts'
-import * as WorkControlInvariant from '../src/invariant.ts'
+import type { WorkItem, WorkItemChanged } from '../../../src/internal/control/index.ts'
+import { WorkItemId } from '../../../src/internal/control/index.ts'
+import * as WorkControlInvariant from '../../../src/internal/control/invariant.ts'
 
 async function setup(current?: WorkItem): Promise<Context> {
   const ctx = new Context()

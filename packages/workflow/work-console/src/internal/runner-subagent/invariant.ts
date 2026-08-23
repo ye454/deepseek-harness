@@ -8,7 +8,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 import { WORK_RUNNER_PROMPT_PREFIX } from './prompt.ts'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-work-runner-subagent'
+const PACKAGE_NAME = '@deepseek-ai/dsh-work-console/internal-runner-subagent'
 
 /** Cordis companion plugin name. */
 export const name = 'work-runner-subagent-invariant'
